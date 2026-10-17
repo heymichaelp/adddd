@@ -130,11 +130,16 @@ th { color: var(--dim); font-weight: 500; }
 .read .reviewed { border-left-color: var(--accent); }
 
 @media (max-width: 860px) {
-  .term { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
-  .main { min-height: 0; }
-  .scroll { flex: none; overflow: visible; min-height: 40vh; }
-  .pane { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
+  html, body { height: auto; }
+  body { display: block; }
+  .term, .main { display: block; min-height: 0; }
+  .scroll { overflow: visible; min-height: 0; padding-block: 12px 10px; }
+  .dock { position: sticky; bottom: 0; background: var(--bg); padding-bottom: env(safe-area-inset-bottom, 0px); z-index: 5; }
+  .band { padding-block: 8px; }
+  .composer { padding-block: 8px 10px; }
   .composer .hint { display: none; }
+  .pane { border-left: 0; border-top: 1px solid var(--rule); padding: 12px 0 24px; overflow: visible; }
+  .toast { top: calc(8px + env(safe-area-inset-top, 0px)); bottom: auto; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); max-width: none; }
 }
 @media (prefers-reduced-motion: no-preference) {
   .cursor { animation: blink 1.1s steps(2, start) infinite; }
@@ -161,12 +166,14 @@ th { color: var(--dim); font-weight: 500; }
         <div>Not in the mood? <a href="#read" id="readLink">Read it plain.</a></div>
       </div>
     </div>
-    <div class="band" id="band" aria-live="polite"></div>
-    <form class="composer" id="composer" autocomplete="off">
-      <span class="prompt">❯</span>
-      <input id="input" type="text" aria-label="your one prompt" placeholder="" spellcheck="false">
-      <span class="hint" id="hint">Enter sends · digits press buttons</span>
-    </form>
+    <div class="dock">
+      <div class="band" id="band" aria-live="polite"></div>
+      <form class="composer" id="composer" autocomplete="off">
+        <span class="prompt">❯</span>
+        <input id="input" type="text" aria-label="your one prompt" placeholder="" spellcheck="false">
+        <span class="hint" id="hint">Enter sends · digits press buttons</span>
+      </form>
+    </div>
   </div>
   <aside class="pane" id="pane"></aside>
 </div>
@@ -508,6 +515,7 @@ function log(cmd, drop) {
   e.innerHTML = `<div class="cmd">${esc(cmd)}</div><div class="drop">${drop}</div>`;
   $('scroll').appendChild(e);
   $('scroll').scrollTop = $('scroll').scrollHeight;
+  if (window.matchMedia('(max-width: 860px)').matches) e.scrollIntoView({ block: 'end' });
 }
 function key(n, label, full) { return `<button type="button" data-key="${n}" class="${full ? 'full' : ''}"><b>${n}:</b> ${label}</button>`; }
 function statusLine() {
