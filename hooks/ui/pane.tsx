@@ -12,6 +12,8 @@ export type Actions = {
   meh: () => void
   look: () => void
   slack: () => void
+  didIt: () => void
+  never: () => void
   openLink: () => void
   jumpIn: (worker: AddddWorker) => void
   back: () => void
@@ -126,6 +128,39 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
   }
   if (card.kind === 'squirrel') {
     const s = card.squirrel
+    if (s.source === 'life') {
+      return (
+        <Box flexDirection="column">
+          <Text>
+            <Text color="magenta" weight="bold">
+              🚪 OFF-SCREEN
+            </Text>
+            <Text dimColor> · {s.blurb}</Text>
+          </Text>
+          <Text weight="bold">{s.title}</Text>
+          <Text color="magenta">{s.why}</Text>
+          {s.note ? <Text color="green">{s.note}</Text> : null}
+          <Box gap={1}>
+            <Button key="meh" hotkey="1" plain onPress={a.meh}>
+              meh
+            </Button>
+            <Button key="did" hotkey="2" plain onPress={a.didIt}>
+              did it
+            </Button>
+            <Button key="slack" hotkey="3" plain onPress={a.slack}>
+              slack me
+            </Button>
+            <Button key="never" hotkey="4" plain onPress={a.never}>
+              never again
+            </Button>
+          </Box>
+          <Text dimColor>
+            /adddd meh · did · slack · never
+            {behind}
+          </Text>
+        </Box>
+      )
+    }
     return (
       <Box flexDirection="column">
         <Text>

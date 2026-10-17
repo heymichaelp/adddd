@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0 — 2026-10-17
+
+- Off-screen squirrels: about one in three squirrels is a nudge to leave the screen (text your mom, get a snack, but hurry), time-of-day aware, with `did it`, `slack me` and a persistent `never again`. `lifeShare` sets the share.
+
 ## 0.3.0 — 2026-10-17
 
 - Every card has numbered suggestions: three model-drafted prompts per ticket, three replies per question; press the number key or type your own.

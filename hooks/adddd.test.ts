@@ -6,6 +6,7 @@ import { pick, weightOf } from './pick'
 import { atCapacity, nowCard, openWorktrees, overlapsOf, safeKey, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
 import { parseIssueList, toTicket as linearTicket } from './sources/linear'
+import { NUDGES, makeLifeSquirrel, pickNudge, timeOfDay } from './life'
 import { parseBullets, parseCuration, parseDevto, parseGithub, parseHn, stripHtml, topicsFromFiles, topicsFromPackageJson } from './squirrel'
 import { parseConversations, parseHistory, parseMentions, plainText, tsNewer } from './slack'
 import { parseList } from './suggest'
@@ -209,5 +210,32 @@ describe('pane', () => {
       expect(await ui.find({ type: 'Text', text: /no worktrees yet/ })).toBeDefined()
       await ui.unmount()
     }
+  })
+})
+
+describe('off-screen squirrels', () => {
+  test('a nudge fits the hour and skips what was seen', () => {
+    const seen = new Set(NUDGES.filter(n => !n.when).map(n => `life:${n.slug}`))
+    for (let i = 0; i < 20; i++) {
+      const n = pickNudge(seen, 8, Math.random)!
+      expect(n.when === undefined || n.when === 'morning').toBe(true)
+      expect(seen.has(`life:${n.slug}`)).toBe(false)
+    }
+  })
+  test('banned nudges never come back, even when everything else was seen', () => {
+    const all = new Set(NUDGES.map(n => `life:${n.slug}`))
+    const banned = new Set(NUDGES.filter(n => n.slug !== 'water').map(n => `life:${n.slug}`))
+    for (let i = 0; i < 20; i++) expect(pickNudge(all, 13, Math.random, banned)?.slug).toBe('water')
+    expect(pickNudge(all, 13, Math.random, all)).toBeUndefined()
+  })
+  test('a life squirrel has no url and says who is busy', () => {
+    const s = makeLifeSquirrel({ slug: 'x', title: 'text your mom', why: 'w' }, 5, 2)
+    expect(s.url).toBe('')
+    expect(s.source).toBe('life')
+    expect(s.blurb).toBe('2 workers are busy. you are not.')
+    expect(makeLifeSquirrel({ slug: 'x', title: 't', why: 'w' }, 5, 0).blurb).toBe('nothing is waiting on you.')
+  })
+  test('time of day buckets', () => {
+    expect([timeOfDay(7), timeOfDay(13), timeOfDay(19), timeOfDay(1)]).toEqual(['morning', 'day', 'evening', 'late'])
   })
 })

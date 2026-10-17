@@ -37,9 +37,9 @@ export type AddddWorker = {
   updatedAt: number
 }
 
-export type SquirrelSource = 'hn' | 'github' | 'devto'
+export type SquirrelSource = 'hn' | 'github' | 'devto' | 'life'
 
-/** Something shiny between tickets: a real link, curated by the model. */
+/** Something shiny between tickets: a real link curated by the model, or (source 'life') an off-screen nudge with no url. */
 export type AddddSquirrel = {
   id: string
   title: string

@@ -277,7 +277,7 @@ export async function gistOf($: EngineInterface, s: AddddSquirrel): Promise<stri
 // ---------- slack: DM yourself ----------
 
 export async function sendSlack($: EngineInterface, webhook: string, s: AddddSquirrel): Promise<string | undefined> {
-  const lines = [`🐿️ *${s.title}*`, s.url, s.why, ...(s.gist ?? []).map(b => `• ${b}`), `_from ${s.source} · ${s.topic}_`]
+  const lines = [`🐿️ *${s.title}*`, ...(s.url ? [s.url] : []), s.why, ...(s.gist ?? []).map(b => `• ${b}`), `_from ${s.source} · ${s.topic}_`]
   const res = await $.http.fetch(webhook, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

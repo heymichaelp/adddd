@@ -8,6 +8,7 @@ import { ago, atCapacity, inFlight, isActive, nowCard, openWorktrees, safeKey, s
 import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, labelGithubIssue, listGithubIssues } from './sources/github'
 import { listLinearIssues, setLinearState } from './sources/linear'
 import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
+import { isLife, makeLifeSquirrel, pickNudge } from './life'
 import { gistOf, huntSquirrel, openInBrowser, sendSlack, topicsOf } from './squirrel'
 import { STATIC_PROMPTS, STATIC_REPLIES, suggestPrompts, suggestReplies } from './suggest'
 import { drawBand } from './ui/band'
@@ -32,6 +33,8 @@ type Options = {
   moveToReview: boolean
   sounds: boolean
   squirrels: boolean
+  /** Share of squirrels that are off-screen nudges, 0..1. */
+  lifeShare: number
   topics: string
   slackWebhookUrl: string
   slackToken: string
@@ -53,6 +56,7 @@ function readOptions(options: PluginOptions): Options {
     moveToReview: bool('moveToReview', true),
     sounds: bool('sounds', true),
     squirrels: bool('squirrels', true),
+    lifeShare: Math.min(1, Math.max(0, num('lifeShare', 1 / 3))),
     topics: str('topics', ''),
     slackWebhookUrl: str('slackWebhookUrl', ''),
     slackToken: str('slackToken', ''),
@@ -70,6 +74,7 @@ const USAGE = [
   '/adddd source linear|github',
   '/adddd ok [KEY|all]  dismiss the card in front of you (or one, or every done one)',
   '/adddd meh|gist|slack|browser   the squirrel in front of you: dismiss, gist, DM yourself, browser (look/open still work)',
+  '/adddd did|never   an off-screen card: you did the thing · never show that one again',
   '/adddd say <reply> · meh · browser   the Slack message in front of you · /adddd inbox checks now',
   '/adddd squirrel      fetch one now',
   '/adddd view [KEY]    put that worker\'s transcript in the main view · /adddd back',
@@ -95,6 +100,9 @@ let pantry: AddddSquirrel | null = null
 let hunting = false
 let seen: string[] = []
 const SEEN_KEY = 'adddd:squirrels:seen'
+/** Off-screen nudges the operator never wants to see again; survives sessions. */
+let never: string[] = []
+const NEVER_KEY = 'adddd:life:never'
 let slackMsg: AddddSlackMsg | null = null
 let slackInbox: AddddSlackMsg[] = []
 let slackSeen: SlackSeen = {}
@@ -265,17 +273,50 @@ async function restock($: EngineInterface): Promise<void> {
   if (!opt.squirrels || pantry || hunting) return
   hunting = true
   try {
-    const topics = await topicsOf($, root, opt.topics)
-    const found = await huntSquirrel($, topics, new Set(seen), ticketContext())
-    if (found) pantry = found
+    if (!(Math.random() < opt.lifeShare)) {
+      const topics = await topicsOf($, root, opt.topics)
+      const found = await huntSquirrel($, topics, new Set(seen), ticketContext())
+      if (found) pantry = found
+    }
   } catch {
     // the internet was not interesting today
   } finally {
     hunting = false
   }
+  if (!pantry && opt.lifeShare > 0) pantry = await lifeSquirrel($)
+}
+
+async function lifeSquirrel($: EngineInterface): Promise<AddddSquirrel | null> {
+  const now = await $.clock.now()
+  const banned = new Set(never.map(slug => `life:${slug}`))
+  const avoid = new Set([...seen, ...banned])
+  const n = pickNudge(avoid, new Date(now).getHours(), Math.random, banned)
+  return n ? makeLifeSquirrel(n, now, inFlight(workers).length) : null
+}
+
+async function neverAgain($: EngineInterface): Promise<string> {
+  if (!squirrel || !isLife(squirrel)) return 'that only works on an off-screen card.'
+  const slug = squirrel.id.replace(/^life:/, '')
+  const title = squirrel.title
+  never = [...never.filter(s => s !== slug), slug]
+  await $.store.set(NEVER_KEY, never)
+  if (pantry && pantry.id === squirrel.id) pantry = null
+  await dismissSquirrel($)
+  await publish($)
+  return `🚪 "${title}" will not come back.`
+}
+
+async function didIt($: EngineInterface): Promise<string> {
+  if (!squirrel) return 'no card in front of you.'
+  const title = squirrel.title
+  sound($, 'done')
+  await dismissSquirrel($)
+  await publish($)
+  return `✅ ${title}. nice.`
 }
 
 async function markSeen($: EngineInterface, url: string): Promise<void> {
+  if (!url) return
   seen = [...seen.filter(u => u !== url), url].slice(-500)
   await $.store.set(SEEN_KEY, seen).catch(() => undefined)
 }
@@ -397,7 +438,7 @@ async function openSlack($: EngineInterface): Promise<string> {
 
 async function dismissSquirrel($: EngineInterface): Promise<void> {
   if (!squirrel) return
-  await markSeen($, squirrel.url)
+  await markSeen($, squirrel.url || squirrel.id)
   squirrel = null
   void restock($)
   await idleFill($)
@@ -406,6 +447,7 @@ async function dismissSquirrel($: EngineInterface): Promise<void> {
 async function lookAtSquirrel($: EngineInterface): Promise<string> {
   if (!squirrel) return 'no squirrel in front of you.'
   const s = squirrel
+  if (isLife(s)) return 'nothing to read. go do it.'
   try {
     s.gist = await gistOf($, s)
     await publish($)
@@ -422,7 +464,7 @@ async function slackSquirrel($: EngineInterface): Promise<string> {
   const s = squirrel
   if (opt.slackToken) {
     if (!slackSelf) slackSelf = await whoAmI($, opt.slackToken).catch(() => '')
-    const lines = [`🐿️ *${s.title}*`, s.url, s.why, ...(s.gist ?? []).map(b => `• ${b}`)]
+    const lines = [`🐿️ *${s.title}*`, ...(s.url ? [s.url] : []), s.why, ...(s.gist ?? []).map(b => `• ${b}`)]
     const err = slackSelf ? await dmSelf($, opt.slackToken, slackSelf, lines.join('\n')) : 'could not read your Slack user id'
     if (err) {
       s.note = `Slack: ${err}`
@@ -453,6 +495,7 @@ async function slackSquirrel($: EngineInterface): Promise<string> {
 async function openSquirrel($: EngineInterface): Promise<string> {
   if (!squirrel) return 'no squirrel in front of you.'
   const s = squirrel
+  if (isLife(s)) return 'nothing to open. it is out there, not in here.'
   const err = await openInBrowser($, s.url)
   s.note = err ? `${err} · ${s.url}` : 'opened in your browser'
   await publish($)
@@ -527,7 +570,7 @@ async function declare($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'adddd',
     description: 'ADD-driven development: one ticket, one prompt, one worktree at a time',
-    argumentHint: '[next|ok|meh|gist|slack|browser|view|reply|pane|pause|status|source|review|retry|cleanup]',
+    argumentHint: '[next|ok|meh|did|never|gist|slack|browser|view|reply|pane|pause|status|source|review|retry|cleanup]',
   })
 }
 
@@ -614,6 +657,8 @@ const actions = ($: EngineInterface): Actions => ({
   },
   look: () => void lookAtSquirrel($),
   slack: () => void slackSquirrel($),
+  didIt: () => void didIt($),
+  never: () => void neverAgain($),
   openLink: () => void (slackMsg ? openSlack($) : openSquirrel($)),
   jumpIn: w => {
     if (!w.agentId) return
@@ -703,6 +748,12 @@ export const register: Register = (on, options) => {
       seen = []
     }
     try {
+      const savedNever = await $.store.get(NEVER_KEY)
+      if (Array.isArray(savedNever)) never = savedNever.filter((u): u is string => typeof u === 'string')
+    } catch {
+      never = []
+    }
+    try {
       const savedSlack = await $.store.get(SLACK_SEEN_KEY)
       if (savedSlack && typeof savedSlack === 'object' && !Array.isArray(savedSlack)) slackSeen = savedSlack as SlackSeen
     } catch {
@@ -789,6 +840,11 @@ export const register: Register = (on, options) => {
         if (!slackMsg && serveSlack()) await publish($)
         return { text: `💬 ${n} new · ${slackInbox.length + (slackMsg ? 1 : 0)} waiting${slackMsg ? ` · in front: ${slackMsg.userName}: ${slackMsg.text.slice(0, 80)}` : ''}` }
       }
+      case 'did':
+      case 'done!':
+        return { text: await didIt($) }
+      case 'never':
+        return { text: await neverAgain($) }
       case 'gist':
       case 'look':
         return { text: await lookAtSquirrel($) }
@@ -804,7 +860,7 @@ export const register: Register = (on, options) => {
           serveSquirrel($)
         }
         await publish($)
-        return { text: squirrel ? `🐿️ ${squirrel.title}\n${squirrel.url}\n${squirrel.why}` : 'no squirrel found right now (network? topics?). try again in a bit.' }
+        return { text: squirrel ? `🐿️ ${squirrel.title}${squirrel.url ? `\n${squirrel.url}` : ''}\n${squirrel.why}` : 'no squirrel found right now (network? topics?). try again in a bit.' }
       }
       case 'view': {
         const w = arg ? findWorker(arg) : (() => { const c = nowCard({ workers, picked, squirrel, slackMsg }); return c.kind === 'worker' ? c.worker : undefined })()

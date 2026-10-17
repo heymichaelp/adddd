@@ -34,6 +34,7 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 | `/adddd status` | text summary of every worktree, readable by the model too |
 | `/adddd meh` / `gist` / `slack` / `browser` | the squirrel in front of you: dismiss, three-bullet gist on the card, DM yourself, open in your browser (`look` and `open` are aliases) |
 | `/adddd squirrel` | fetch one now |
+| `/adddd did` / `never` | an off-screen card: you did the thing · retire that nudge for good |
 | `/adddd say <reply>` / `meh` / `browser` / `inbox` | the unread Slack message in front of you: reply, mark read, open the permalink, check now |
 | `/adddd view [KEY]` / `back` | put a worker's transcript in the main view, and return |
 | `/adddd reply KEY …` | answer a worker explicitly (a plain prompt does this too, see below) |
@@ -53,6 +54,8 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 - NOW is a picked ticket: your prompt dispatches it.
 
 **Squirrels.** Between tickets a 🐿️ card shows up: one real link (a Hacker News story, a GitHub repo, a dev.to post) on a topic inferred from your repo's dependencies and languages, with one line from the model on why you might care. `/adddd meh` dismisses it, `gist` fetches the page and puts a three-bullet gist on the card (you stay in the terminal), `browser` opens it in your browser, `slack` DMs it to you (set a Slack incoming webhook pointed at your own DM under `/config` → adddd) and moves on. Typing a prompt skips straight past it to the ticket. Set `topics` in `/config` to steer the hunt, or turn `squirrels` off.
+
+**Off-screen squirrels.** About one squirrel in three is not a link at all but a 🚪 nudge to leave the screen for a minute: *text your mom*, *get a snack, but hurry*, *refill your water*, *lie on the floor for two minutes*. They fit the hour (coffee in the morning, dinner in the evening, brush your teeth late). `did it` dismisses with a little fanfare, `meh` just dismisses, `slack me` DMs the reminder, and `never again` retires that nudge permanently (it is remembered across sessions). `lifeShare` in `/config` sets the share, 0 to 1.
 
 **Slack between tickets.** With a Slack *user* token in `/config` → adddd (`slackToken`, stored as a secret), adddd polls every two minutes for unread DMs, group DMs and @mentions of you. Each one becomes a 💬 card served between tickets, ahead of squirrels, chaining until the inbox is empty. `/adddd meh` marks it read, `/adddd say <reply>` answers (in-thread for a channel mention), `/adddd browser` opens the permalink, `/adddd inbox` checks now. Typing a plain prompt skips the card without marking it read, so a ticket prompt can never land in Slack. With a token set, "slack me" on a squirrel DMs you directly and the webhook is not needed.
 

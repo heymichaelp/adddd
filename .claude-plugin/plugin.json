@@ -1,6 +1,6 @@
 {
   "name": "adddd",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "license": "MIT",
   "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited workers in the background.",
   "types": "./types/index.d.ts",
@@ -74,6 +74,12 @@
       "title": "Squirrels between tickets",
       "description": "Surface an interesting article, post or library between tickets",
       "default": true
+    },
+    "lifeShare": {
+      "type": "number",
+      "title": "Off-screen squirrels",
+      "description": "Share of squirrels that nudge you away from the screen (text your mom, get a snack): 0 = never, 1 = always. 'never again' on a card retires that nudge for good",
+      "default": 0.33
     },
     "topics": {
       "type": "string",
