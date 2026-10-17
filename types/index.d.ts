@@ -14,6 +14,8 @@ export type AddddTicket = {
   priority: number
   createdAt: number
   description?: string
+  /** Ready-made prompts for the card; a number key sends one. */
+  suggestions?: string[]
 }
 
 export type AddddWorker = {
@@ -29,6 +31,8 @@ export type AddddWorker = {
   summary?: string
   question?: string
   touched: string[]
+  /** Ready-made replies to the worker's question; a number key sends one. */
+  suggestions?: string[]
   dispatchedAt: number
   updatedAt: number
 }
@@ -71,6 +75,8 @@ export type AddddBoard = {
   squirrel: AddddSquirrel | null
   slackMsg: AddddSlackMsg | null
   slackInbox: number
+  /** Open worktrees (not dismissed) against the cap; max 0 means unlimited. */
+  capacity: { open: number; max: number }
   paused: boolean
   backlogCount: number
   source: AddddSource

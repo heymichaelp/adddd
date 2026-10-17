@@ -3,11 +3,12 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { AddddTicket, AddddWorker } from '../types'
 import { parseStatus } from './parse'
 import { pick, weightOf } from './pick'
-import { nowCard, overlapsOf, safeKey, statusLine } from './registry'
+import { atCapacity, nowCard, openWorktrees, overlapsOf, safeKey, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
 import { parseIssueList, toTicket as linearTicket } from './sources/linear'
 import { parseBullets, parseCuration, parseDevto, parseGithub, parseHn, stripHtml, topicsFromFiles, topicsFromPackageJson } from './squirrel'
 import { parseConversations, parseHistory, parseMentions, plainText, tsNewer } from './slack'
+import { parseList } from './suggest'
 import { buildWorkerPrompt } from './worker-prompt'
 
 const ticket = (key: string, priority = 0): AddddTicket => ({ key, id: key, title: `do ${key}`, url: '', source: 'linear', priority, createdAt: 0 })
@@ -82,6 +83,14 @@ describe('registry', () => {
   test('status line counts', () => {
     expect(statusLine({ workers: [worker('A', 'running'), worker('B', 'needs-human')], backlogCount: 3, paused: false })).toBe('adddd · 1 in flight · 1 needs you · 3 in backlog')
   })
+  test('open worktrees count against the cap, dismissed ones do not', () => {
+    const ws = [worker('A', 'running'), worker('B', 'done'), worker('C', 'needs-human'), worker('D', 'dismissed')]
+    expect(openWorktrees(ws).map(w => w.key)).toEqual(['A', 'B', 'C'])
+    expect(atCapacity(ws, 3)).toBe(true)
+    expect(atCapacity(ws, 4)).toBe(false)
+    expect(atCapacity(ws, 0)).toBe(false)
+    expect(statusLine({ workers: ws, backlogCount: 2, paused: false, capacity: { open: 3, max: 6 } })).toBe('adddd · 1 in flight · 3/6 worktrees · 1 needs you · 1 done · 2 in backlog')
+  })
   test('safeKey strips what git dislikes', () => {
     expect(safeKey('ENG-12')).toBe('ENG-12')
     expect(safeKey('#12 weird/key')).toBe('12-weird-key')
@@ -150,6 +159,15 @@ describe('slack', () => {
     const squirrel = { id: 's', title: 'S', url: 'https://s', blurb: '', source: 'hn' as const, topic: 't', why: 'w', foundAt: 0 }
     expect(nowCard({ workers: [], picked: ticket('C'), squirrel, slackMsg: msg }).kind).toBe('slack')
     expect(nowCard({ workers: [worker('B', 'needs-human')], picked: null, squirrel: null, slackMsg: msg }).kind).toBe('worker')
+  })
+})
+
+describe('suggestions', () => {
+  test('a JSON array, a numbered list and junk all parse to three lines', () => {
+    expect(parseList('["Fix it", "Look first", "Add a test"]')).toEqual(['Fix it', 'Look first', 'Add a test'])
+    expect(parseList('Sure, options:\n1. Fix it\n2) Look first\n- Add a test\n4. extra')).toEqual(['Fix it', 'Look first', 'Add a test'])
+    expect(parseList('["dup", "Dup", "x"]')).toEqual(['dup', 'x'])
+    expect(parseList('')).toEqual([])
   })
 })
 

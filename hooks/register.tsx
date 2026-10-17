@@ -4,11 +4,12 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { AddddBoard, AddddSlackMsg, AddddSource, AddddSquirrel, AddddTicket, AddddWorker, PickMode } from '../types'
 import { parseStatus } from './parse'
 import { pick } from './pick'
-import { ago, inFlight, isActive, nowCard, safeKey, statusLine } from './registry'
+import { ago, atCapacity, inFlight, isActive, nowCard, openWorktrees, safeKey, statusLine } from './registry'
 import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, labelGithubIssue, listGithubIssues } from './sources/github'
 import { listLinearIssues, setLinearState } from './sources/linear'
 import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
 import { gistOf, huntSquirrel, openInBrowser, sendSlack, topicsOf } from './squirrel'
+import { STATIC_PROMPTS, STATIC_REPLIES, suggestPrompts, suggestReplies } from './suggest'
 import { drawBand } from './ui/band'
 import { drawPane, type Actions } from './ui/pane'
 import { buildWorkerPrompt, starterPrompt, WORKER_SYSTEM_PROMPT } from './worker-prompt'
@@ -18,7 +19,7 @@ const PANE = 'adddd'
 const AGENT = 'adddd:worker'
 const RECONCILE_MS = 20000
 
-const EMPTY: AddddBoard = { workers: [], picked: null, squirrel: null, slackMsg: null, slackInbox: 0, paused: false, backlogCount: 0, source: 'linear', note: null, now: 0 }
+const EMPTY: AddddBoard = { workers: [], picked: null, squirrel: null, slackMsg: null, slackInbox: 0, capacity: { open: 0, max: 6 }, paused: false, backlogCount: 0, source: 'linear', note: null, now: 0 }
 const board = atom({ plugin: 'adddd', key: 'board' } as const, EMPTY)
 
 type Options = {
@@ -48,7 +49,7 @@ function readOptions(options: PluginOptions): Options {
     linearTeam: str('linearTeam', ''),
     githubRepo: str('githubRepo', ''),
     pick: mode === 'random' || mode === 'priority' ? mode : 'weighted',
-    maxInFlight: Math.max(0, Math.floor(num('maxInFlight', 0))),
+    maxInFlight: Math.max(0, Math.floor(num('maxInFlight', 6))),
     moveToReview: bool('moveToReview', true),
     sounds: bool('sounds', true),
     squirrels: bool('squirrels', true),
@@ -68,8 +69,8 @@ const USAGE = [
   '/adddd status     what every worktree is doing',
   '/adddd source linear|github',
   '/adddd ok [KEY|all]  dismiss the card in front of you (or one, or every done one)',
-  '/adddd meh|look|slack|open   the squirrel in front of you: dismiss, gist, DM yourself, browser',
-  '/adddd say <reply> · meh · open   the Slack message in front of you · /adddd inbox checks now',
+  '/adddd meh|gist|slack|browser   the squirrel in front of you: dismiss, gist, DM yourself, browser (look/open still work)',
+  '/adddd say <reply> · meh · browser   the Slack message in front of you · /adddd inbox checks now',
   '/adddd squirrel      fetch one now',
   '/adddd view [KEY]    put that worker\'s transcript in the main view · /adddd back',
   '/adddd reply KEY …   answer a worker without switching views',
@@ -115,7 +116,19 @@ const sound = ($: EngineInterface, name: 'dispatch' | 'resurface' | 'done') => {
 
 async function publish($: EngineInterface): Promise<AddddBoard> {
   const now = await $.clock.now()
-  const snap: AddddBoard = { workers: [...workers], picked, squirrel, slackMsg, slackInbox: slackInbox.length, paused, backlogCount: backlog.length, source, note, now }
+  const snap: AddddBoard = {
+    workers: [...workers],
+    picked,
+    squirrel,
+    slackMsg,
+    slackInbox: slackInbox.length,
+    capacity: { open: openWorktrees(workers).length, max: opt.maxInFlight },
+    paused,
+    backlogCount: backlog.length,
+    source,
+    note,
+    now,
+  }
   await update($, board, () => snap)
   const busy = workers.some(isActive) || picked !== null
   $.ui.status(busy ? statusLine(snap) : undefined)
@@ -139,10 +152,34 @@ async function pickNext($: EngineInterface, skipping?: string): Promise<AddddTic
     $.ui.toast(`adddd · ${note}`, { timeoutMs: 8000 })
     backlog = []
   }
+  if (atCapacity(workers, opt.maxInFlight)) {
+    picked = null
+    note = `${openWorktrees(workers).length}/${opt.maxInFlight} worktrees open · review or dismiss one to pick more`
+    return null
+  }
   const candidates = skipping ? backlog.filter(t => t.key !== skipping) : backlog
   picked = pick(candidates, opt.pick) ?? null
-  if (picked) void $.prompt.suggest({ text: starterPrompt() })
+  if (picked) {
+    picked.suggestions = [...STATIC_PROMPTS]
+    void $.prompt.suggest({ text: starterPrompt() })
+    void refreshPromptSuggestions($, picked)
+  }
   return picked
+}
+
+async function refreshPromptSuggestions($: EngineInterface, t: AddddTicket): Promise<void> {
+  const found = await suggestPrompts($, t).catch(() => [])
+  if (found.length === 0 || picked?.key !== t.key) return
+  picked.suggestions = found
+  void $.prompt.suggest({ text: found[0] ?? '' })
+  await publish($)
+}
+
+async function refreshReplySuggestions($: EngineInterface, w: AddddWorker): Promise<void> {
+  const found = await suggestReplies($, w).catch(() => [])
+  if (found.length === 0 || w.status !== 'needs-human') return
+  w.suggestions = found
+  await publish($)
 }
 
 async function markTicket($: EngineInterface, ticket: AddddTicket, phase: 'start' | 'review'): Promise<void> {
@@ -163,8 +200,8 @@ async function markTicket($: EngineInterface, ticket: AddddTicket, phase: 'start
 }
 
 async function dispatch($: EngineInterface, ticket: AddddTicket, prompt: string): Promise<AddddWorker> {
-  if (opt.maxInFlight > 0 && inFlight(workers).length >= opt.maxInFlight) {
-    throw new Error(`${opt.maxInFlight} workers already in flight (maxInFlight)`)
+  if (atCapacity(workers, opt.maxInFlight) && !workers.some(w => w.key === ticket.key && w.status !== 'dismissed')) {
+    throw new Error(`${opt.maxInFlight} worktrees already open; review or dismiss one first`)
   }
   const key = safeKey(ticket.key)
   const base = await baseBranch($, root)
@@ -266,6 +303,20 @@ function serveNext($: EngineInterface): 'slack' | 'squirrel' | undefined {
   return undefined
 }
 
+/** At the cap with nothing needing you: a squirrel (or a Slack message) rather than an empty card. */
+async function idleFill($: EngineInterface): Promise<boolean> {
+  if (paused || !atCapacity(workers, opt.maxInFlight)) return false
+  if (nowCard({ workers, picked, squirrel, slackMsg }).kind !== 'idle') return false
+  if (!pantry && !hunting) await restock($)
+  return serveNext($) !== undefined
+}
+
+/** A slot opened (a dismiss, a cleanup): pick a ticket again if none is waiting. */
+async function afterSlotFreed($: EngineInterface): Promise<void> {
+  if (paused || picked || atCapacity(workers, opt.maxInFlight)) return
+  await pickNext($)
+}
+
 // ---------- slack ----------
 
 async function slackName($: EngineInterface, user: string): Promise<string> {
@@ -349,6 +400,7 @@ async function dismissSquirrel($: EngineInterface): Promise<void> {
   await markSeen($, squirrel.url)
   squirrel = null
   void restock($)
+  await idleFill($)
 }
 
 async function lookAtSquirrel($: EngineInterface): Promise<string> {
@@ -407,6 +459,63 @@ async function openSquirrel($: EngineInterface): Promise<string> {
   return err ? `${err}; the link is ${s.url}` : `opened ${s.url}`
 }
 
+/** The operator's words for a picked ticket: dispatch it, pick the next, serve a card. Resolves the line to show. */
+async function shipTicket($: EngineInterface, ticket: AddddTicket, text: string): Promise<string> {
+  picked = null
+  try {
+    const worker = await dispatch($, ticket, text)
+    sound($, 'dispatch')
+    void markTicket($, ticket, 'start')
+    const nextTicket = await pickNext($)
+    const served = serveNext($)
+    await publish($)
+    void $.ui.open({ id: PANE, title: 'adddd' })
+    const shipped = `🎯 ${ticket.key} shipped to ${worker.branch} · ${inFlight(workers).length} in flight · it comes back only when it needs you`
+    const upNext = nextTicket
+      ? `NEXT ▶ ${nextTicket.key} · ${nextTicket.title} · press a number or type ONE prompt`
+      : atCapacity(workers, opt.maxInFlight)
+        ? `${openWorktrees(workers).length}/${opt.maxInFlight} worktrees open · squirrels until something needs you`
+        : 'backlog empty 🎉 · /adddd to check again'
+    const shiny =
+      served === 'slack' && slackMsg
+        ? `  ⟶  💬 first, Slack: ${slackMsg.userName} in ${slackMsg.channelName}`
+        : served === 'squirrel' && squirrel
+          ? `  ⟶  🐿️ first, a squirrel: ${squirrel.title}`
+          : ''
+    return `${shipped}${shiny}  ⟶  ${upNext}`
+  } catch (err) {
+    picked = ticket
+    note = `dispatch failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 200)
+    await publish($)
+    throw new Error(note)
+  }
+}
+
+/** The operator's words for a worker card: a reply, or a re-run when its agent is gone. Resolves the line to show. */
+async function answerWorker($: EngineInterface, w: AddddWorker, text: string): Promise<string> {
+  if (w.status === 'failed' || !w.agentId) {
+    await dispatch($, w.ticket, text)
+    sound($, 'dispatch')
+    await publish($)
+    return `🔁 ${w.key} re-dispatched to ${w.branch} with your new prompt (its earlier commits are still on the branch)`
+  }
+  const err = await reply($, w, text)
+  await publish($)
+  if (err) throw new Error(err)
+  return `↩ sent to ${w.key} · it comes back when it needs you${picked ? `  ⟶  NEXT ▶ ${picked.key} · ${picked.title} · press a number or type ONE prompt` : ''}`
+}
+
+/** A number key on the card: the same path as Enter, minus the composer. */
+async function chooseNow($: EngineInterface, text: string): Promise<void> {
+  const card = nowCard({ workers, picked, squirrel, slackMsg })
+  try {
+    if (card.kind === 'ticket') $.ui.toast(await shipTicket($, card.ticket, text), { timeoutMs: 8000 })
+    else if (card.kind === 'worker') $.ui.toast(await answerWorker($, card.worker, text), { timeoutMs: 8000 })
+  } catch (err) {
+    $.ui.toast(`adddd · ${(err as Error)?.message ?? String(err)}`, { timeoutMs: 8000 })
+  }
+}
+
 /** The command and the agent type are the session's: a /clear starts a new one, so they are declared again. */
 async function declare($: EngineInterface): Promise<void> {
   await $.agent.register({
@@ -418,7 +527,7 @@ async function declare($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'adddd',
     description: 'ADD-driven development: one ticket, one prompt, one worktree at a time',
-    argumentHint: '[next|ok|meh|look|slack|open|view|reply|pane|pause|status|source|review|retry|cleanup]',
+    argumentHint: '[next|ok|meh|gist|slack|browser|view|reply|pane|pause|status|source|review|retry|cleanup]',
   })
 }
 
@@ -471,6 +580,7 @@ async function reconcile($: EngineInterface): Promise<void> {
     }
   }
   for (const w of workers.filter(isActive)) await refreshTouched($, w)
+  await idleFill($)
   await publish($)
 }
 
@@ -493,6 +603,7 @@ function pickedText(t: AddddTicket | null): string {
 }
 
 const actions = ($: EngineInterface): Actions => ({
+  choose: text => void chooseNow($, text),
   say: () => void $.prompt.fill({ text: '/adddd say ', mode: 'replace' }),
   meh: () => {
     void (async () => {
@@ -519,8 +630,11 @@ const actions = ($: EngineInterface): Actions => ({
     void $.ui.view({})
   },
   dismiss: w => {
-    w.status = 'dismissed'
-    void publish($)
+    void (async () => {
+      w.status = 'dismissed'
+      await afterSlotFreed($)
+      await publish($)
+    })()
   },
   retry: w => {
     void (async () => {
@@ -618,6 +732,11 @@ export const register: Register = (on, options) => {
         paused = false
         void $.ui.open({ id: PANE, title: 'adddd' })
         const t = await pickNext($)
+        if (!t && atCapacity(workers, opt.maxInFlight)) {
+          await idleFill($)
+          await publish($)
+          return { text: `${note ?? 'at capacity'}.${squirrel ? ` meanwhile: 🐿️ ${squirrel.title}` : ''}` }
+        }
         await publish($)
         return { text: pickedText(t) }
       }
@@ -670,10 +789,12 @@ export const register: Register = (on, options) => {
         if (!slackMsg && serveSlack()) await publish($)
         return { text: `💬 ${n} new · ${slackInbox.length + (slackMsg ? 1 : 0)} waiting${slackMsg ? ` · in front: ${slackMsg.userName}: ${slackMsg.text.slice(0, 80)}` : ''}` }
       }
+      case 'gist':
       case 'look':
         return { text: await lookAtSquirrel($) }
       case 'slack':
         return { text: await slackSquirrel($) }
+      case 'browser':
       case 'open':
         return { text: slackMsg ? await openSlack($) : await openSquirrel($) }
       case 'squirrel': {
@@ -712,8 +833,9 @@ export const register: Register = (on, options) => {
               : (() => { const c = nowCard({ workers, picked, squirrel, slackMsg }); return c.kind === 'worker' ? [c.worker] : [] })()
         if (targets.length === 0) return { text: arg && arg !== 'all' ? `no worker ${arg}` : 'nothing to dismiss.' }
         for (const w of targets) w.status = 'dismissed'
+        await afterSlotFreed($)
         await publish($)
-        return { text: `dismissed ${targets.map(w => w.key).join(', ')}. branches stay; /adddd cleanup removes clean worktrees.` }
+        return { text: `dismissed ${targets.map(w => w.key).join(', ')}. branches stay; /adddd cleanup removes clean worktrees.${picked ? ` NEXT ▶ ${picked.key} · ${picked.title}` : ''}` }
       }
       case 'reply': {
         const [key = '', ...words] = rest
@@ -735,6 +857,7 @@ export const register: Register = (on, options) => {
         const w = findWorker(arg)
         if (!w) return { text: `no worker ${arg}` }
         w.status = 'dismissed'
+        await afterSlotFreed($)
         await publish($)
         return { text: `${w.key} dismissed. its branch ${w.branch} stays; /adddd cleanup removes clean worktrees.` }
       }
@@ -764,6 +887,7 @@ export const register: Register = (on, options) => {
             workers = workers.filter(x => x.key !== w.key)
           }
         }
+        await afterSlotFreed($)
         await publish($)
         return { text: out.length ? out.join('\n') : 'nothing to clean: dismiss done worktrees first.' }
       }
@@ -798,50 +922,21 @@ export const register: Register = (on, options) => {
       card = nowCard({ workers, picked, squirrel, slackMsg })
     }
     if (card.kind === 'worker') {
-      const w = card.worker
-      if (w.status === 'failed' || !w.agentId) {
-        try {
-          await dispatch($, w.ticket, text)
-          sound($, 'dispatch')
-          await publish($)
-          clearComposer($)
-          return { drop: `🔁 ${w.key} re-dispatched to ${w.branch} with your new prompt (its earlier commits are still on the branch)` }
-        } catch (err) {
-          return { drop: `adddd · retry failed: ${(err as Error)?.message ?? String(err)}` }
-        }
+      try {
+        const line = await answerWorker($, card.worker, text)
+        clearComposer($)
+        return { drop: line }
+      } catch (err) {
+        return { drop: `adddd · ${(err as Error)?.message ?? String(err)} · your words are still in the box.` }
       }
-      const err = await reply($, w, text)
-      await publish($)
-      if (err) return { drop: `adddd · ${err}` }
-      clearComposer($)
-      return { drop: `↩ sent to ${w.key} · it comes back when it needs you${picked ? `  ⟶  NEXT ▶ ${picked.key} · ${picked.title} · type ONE prompt` : ''}` }
     }
     if (card.kind !== 'ticket' || paused) return next(e)
-    const ticket = card.ticket
-    picked = null
     try {
-      const worker = await dispatch($, ticket, text)
-      sound($, 'dispatch')
-      void markTicket($, ticket, 'start')
-      const nextTicket = await pickNext($)
-      const served = serveNext($)
-      await publish($)
-      void $.ui.open({ id: PANE, title: 'adddd' })
+      const line = await shipTicket($, card.ticket, text)
       clearComposer($)
-      const shipped = `🎯 ${ticket.key} shipped to ${worker.branch} · ${inFlight(workers).length} in flight · it comes back only when it needs you`
-      const upNext = nextTicket ? `NEXT ▶ ${nextTicket.key} · ${nextTicket.title} · type ONE prompt` : 'backlog empty 🎉 · /adddd to check again'
-      const shiny =
-        served === 'slack' && slackMsg
-          ? `  ⟶  💬 first, Slack: ${slackMsg.userName} in ${slackMsg.channelName}`
-          : served === 'squirrel' && squirrel
-            ? `  ⟶  🐿️ first, a squirrel: ${squirrel.title}`
-            : ''
-      return { drop: `${shipped}${shiny}  ⟶  ${upNext}` }
+      return { drop: line }
     } catch (err) {
-      picked = ticket
-      note = `dispatch failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 200)
-      await publish($)
-      return { drop: `adddd · ${note} · your prompt is still in the box; nothing was sent anywhere.` }
+      return { drop: `adddd · ${(err as Error)?.message ?? String(err)} · your prompt is still in the box; nothing was sent anywhere.` }
     }
   }).catch(($, e, next) => (next.called ? next(e) : { drop: 'adddd · the dispatch hook failed; your prompt was not sent anywhere. try again.' }))
 
@@ -875,6 +970,10 @@ export const register: Register = (on, options) => {
           w.summary = parsed.summary
           w.question = parsed.question
           w.status = parsed.status === 'done' ? 'done' : 'needs-human'
+          if (w.status === 'needs-human') {
+            w.suggestions = [...STATIC_REPLIES]
+            void refreshReplySuggestions($, w)
+          }
         }
         w.updatedAt = now
         await refreshTouched($, w)
@@ -896,8 +995,6 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     viewing = e.props.view.agentId
     if (e.props.hasSurvey) return next(e)
-    const panes = await $.ui.panes()
-    if (panes.some(p => p.id === PANE && p.isShown && p.isPlaced)) return next(e)
     const b = await read($, board)
     const { Box, Text, Button } = $.ui.resolve(e)
     const tree = drawBand({ Box, Text, Button }, b, actions($), viewing)

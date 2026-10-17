@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0 — 2026-10-17
+
+- Every card has numbered suggestions: three model-drafted prompts per ticket, three replies per question; press the number key or type your own.
+- At most six worktrees open at once (`maxInFlight`); at the cap adddd serves squirrels and Slack cards until something needs you or a slot is freed.
+- Squirrel and Slack card actions relabelled: `gist` (bullets on the card) and `browser` (open the link); `look` and `open` remain as aliases.
+
 ## 0.2.0 — 2026-10-17
 
 - Squirrels: one real link (Hacker News, GitHub repo search, dev.to) between tickets, curated by the model. meh / look / slack me / open.

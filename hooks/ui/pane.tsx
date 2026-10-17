@@ -6,6 +6,8 @@ import { ago, doneUnreviewed, inFlight, needsHuman, nowCard, overlapsOf } from '
 export type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
 export type Actions = {
+  /** Sends a ready-made prompt or reply for the card in front. */
+  choose: (text: string) => void
   say: () => void
   meh: () => void
   look: () => void
@@ -63,10 +65,22 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
       </Box>
     )
   }
+  const full = board.capacity.max > 0 && board.capacity.open >= board.capacity.max
+  const behind = board.picked
+    ? ` — or type your prompt for ${board.picked.key} to skip past it`
+    : full
+      ? ` — ${board.capacity.open}/${board.capacity.max} worktrees open: review or dismiss one to get a new ticket`
+      : ''
   if (card.kind === 'idle') {
     return (
       <Box flexDirection="column">
-        <Text dimColor>{board.paused ? 'paused. nothing is being picked.' : 'nothing in front of you.'}</Text>
+        <Text dimColor>
+          {board.paused
+            ? 'paused. nothing is being picked.'
+            : full
+              ? `${board.capacity.open}/${board.capacity.max} worktrees open and nothing needs you. /adddd ok clears reviewed ones; a squirrel is on its way.`
+              : 'nothing in front of you.'}
+        </Text>
         <Box>
           <Button key="start" hotkey="1" plain onPress={a.start}>
             {board.paused ? 'resume + pick a ticket' : 'pick a ticket'}
@@ -99,13 +113,13 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
           <Button key="say" hotkey="2" plain onPress={a.say}>
             say…
           </Button>
-          <Button key="open" hotkey="3" plain onPress={a.openLink}>
-            open
+          <Button key="browser" hotkey="3" plain onPress={a.openLink}>
+            browser
           </Button>
         </Box>
         <Text dimColor>
-          /adddd meh · say &lt;reply&gt; · open{board.slackInbox > 0 ? ` · ${board.slackInbox} more waiting` : ''}
-          {board.picked ? ` — or type your prompt for ${board.picked.key} to skip past it` : ''}
+          /adddd meh · say &lt;reply&gt; · browser{board.slackInbox > 0 ? ` · ${board.slackInbox} more waiting` : ''}
+          {behind}
         </Text>
       </Box>
     )
@@ -135,19 +149,19 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
           <Button key="meh" hotkey="1" plain onPress={a.meh}>
             meh
           </Button>
-          <Button key="look" hotkey="2" plain onPress={a.look}>
-            look
+          <Button key="gist" hotkey="2" plain onPress={a.look}>
+            gist
           </Button>
           <Button key="slack" hotkey="3" plain onPress={a.slack}>
             slack me
           </Button>
-          <Button key="open" hotkey="4" plain onPress={a.openLink}>
-            open
+          <Button key="browser" hotkey="4" plain onPress={a.openLink}>
+            browser
           </Button>
         </Box>
         <Text dimColor>
-          /adddd meh · look · slack · open
-          {board.picked ? ` — or type your prompt for ${board.picked.key} ${board.picked.title} to skip past it` : ''}
+          /adddd meh · gist · slack · browser
+          {behind}
         </Text>
       </Box>
     )
@@ -163,12 +177,19 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
           {t.title}
           <Text dimColor>{priorityTag(t.priority)}</Text>
         </Text>
-        <Text dimColor>type ONE prompt and press Enter. it ships to a worktree and you never see it again (until it needs you).</Text>
+        {(t.suggestions ?? []).slice(0, 3).map((p, i) => (
+          <Box key={`pick-${i + 1}`}>
+            <Button key={`pick-${i + 1}`} hotkey={String(i + 1)} plain onPress={() => a.choose(p)}>
+              {p}
+            </Button>
+          </Box>
+        ))}
+        <Text dimColor>press a number, or type your own prompt and Enter. it ships to a worktree and you never see it again (until it needs you).</Text>
         <Box gap={1}>
-          <Button key="skip" hotkey="1" plain onPress={a.skip}>
-            skip
+          <Button key="skip" hotkey="0" plain onPress={a.skip}>
+            skip this ticket
           </Button>
-          <Button key="pause" hotkey="2" plain onPress={a.pause}>
+          <Button key="pause" hotkey="9" plain onPress={a.pause}>
             pause
           </Button>
         </Box>
@@ -190,31 +211,53 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
       {w.status !== 'done' && w.question ? <Text color={color}>"{w.question}"</Text> : null}
       <Text dimColor>
         {w.status === 'done'
-          ? 'type a follow-up and it resumes · /adddd ok moves on · /adddd review ' + w.key
+          ? 'press a number, or type a follow-up and it resumes · /adddd review ' + w.key
           : w.status === 'failed'
-            ? 'type a new prompt to re-run it · /adddd ok gives up'
-            : 'type your reply and press Enter · /adddd ok dismisses'}
+            ? 'press a number, or type a new prompt to re-run it'
+            : 'press a number, or type your own reply and Enter'}
       </Text>
+      {w.status === 'needs-human'
+        ? (w.suggestions ?? []).slice(0, 3).map((p, i) => (
+            <Box key={`reply-${i + 1}`}>
+              <Button key={`reply-${i + 1}`} hotkey={String(i + 1)} plain onPress={() => a.choose(p)}>
+                {p}
+              </Button>
+            </Box>
+          ))
+        : null}
       <Box gap={1}>
-        {w.status !== 'failed' && w.agentId ? (
-          <Button key={`jump-${w.key}`} hotkey="1" plain onPress={() => a.jumpIn(w)}>
-            {w.status === 'done' ? 'open transcript' : 'jump in + reply'}
+        {w.status === 'done' ? (
+          <Button key={`dismiss-${w.key}`} hotkey="1" plain onPress={() => a.dismiss(w)}>
+            reviewed, next
+          </Button>
+        ) : null}
+        {w.status === 'done' && w.agentId ? (
+          <Button key={`jump-${w.key}`} hotkey="2" plain onPress={() => a.jumpIn(w)}>
+            open transcript
           </Button>
         ) : null}
         {w.status === 'failed' ? (
           <Button key={`retry-${w.key}`} hotkey="1" plain onPress={() => a.retry(w)}>
-            retry
+            run it again
           </Button>
         ) : null}
-        <Button key={`dismiss-${w.key}`} hotkey="2" plain onPress={() => a.dismiss(w)}>
-          {w.status === 'done' ? 'reviewed, next' : 'dismiss'}
-        </Button>
+        {w.status === 'failed' ? (
+          <Button key={`giveup-${w.key}`} hotkey="2" plain onPress={() => a.dismiss(w)}>
+            give up
+          </Button>
+        ) : null}
+        {w.status === 'needs-human' ? (
+          <Button key={`dismiss-${w.key}`} hotkey="0" plain onPress={() => a.dismiss(w)}>
+            dismiss
+          </Button>
+        ) : null}
       </Box>
     </Box>
   )
 }
 
 export function drawPane(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: string | undefined): RenderElement {
+  void viewingAgent
   const { Box, Text } = ui
   const running = inFlight(board.workers)
   const waiting = needsHuman(board.workers)
@@ -223,12 +266,6 @@ export function drawPane(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: st
   const rows = [...waiting, ...done, ...running]
   return (
     <Box flexDirection="column" gap={1}>
-      <Box flexDirection="column">
-        <Text weight="bold" color="magenta">
-          NOW
-        </Text>
-        {drawNow(ui, board, a, viewingAgent)}
-      </Box>
       <Box flexDirection="column">
         <Text weight="bold" color="magenta">
           IN FLIGHT <Text dimColor>({running.length} running · {waiting.length} waiting on you · {done.length} done)</Text>
@@ -246,7 +283,7 @@ export function drawPane(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: st
         })}
       </Box>
       <Text dimColor>
-        {board.source} · {board.backlogCount} in backlog{board.picked ? ` · picked ${board.picked.key}` : ''}{board.paused ? ' · paused' : ''}
+        {board.source} · {board.backlogCount} in backlog{board.capacity.max > 0 ? ` · ${board.capacity.open}/${board.capacity.max} worktrees` : ''}{board.picked ? ` · picked ${board.picked.key}` : ''}{board.paused ? ' · paused' : ''}
         {board.note ? ` · ${board.note}` : ''}
       </Text>
     </Box>

@@ -6,6 +6,15 @@ export function isActive(w: AddddWorker): boolean {
   return ACTIVE.has(w.status)
 }
 
+/** Worktrees still on disk and on the board: everything not dismissed. */
+export function openWorktrees(workers: readonly AddddWorker[]): AddddWorker[] {
+  return workers.filter(w => w.status !== 'dismissed')
+}
+
+export function atCapacity(workers: readonly AddddWorker[], max: number): boolean {
+  return max > 0 && openWorktrees(workers).length >= max
+}
+
 export function inFlight(workers: readonly AddddWorker[]): AddddWorker[] {
   return workers.filter(w => w.status === 'running')
 }
@@ -52,11 +61,12 @@ export function overlapsOf(workers: readonly AddddWorker[]): Record<string, Reco
   return out
 }
 
-export function statusLine(board: Pick<AddddBoard, 'workers' | 'backlogCount' | 'paused'>): string {
+export function statusLine(board: Pick<AddddBoard, 'workers' | 'backlogCount' | 'paused'> & Partial<Pick<AddddBoard, 'capacity'>>): string {
   const running = inFlight(board.workers).length
   const human = needsHuman(board.workers).length
   const done = doneUnreviewed(board.workers).length
-  const bits = [`${running} in flight`]
+  const cap = board.capacity
+  const bits = [cap && cap.max > 0 ? `${running} in flight · ${cap.open}/${cap.max} worktrees` : `${running} in flight`]
   if (human) bits.push(`${human} need${human === 1 ? 's' : ''} you`)
   if (done) bits.push(`${done} done`)
   bits.push(`${board.backlogCount} in backlog`)

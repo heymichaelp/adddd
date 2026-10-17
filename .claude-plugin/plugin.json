@@ -1,6 +1,6 @@
 {
   "name": "adddd",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited workers in the background.",
   "types": "./types/index.d.ts",
   "userConfig": {
@@ -45,9 +45,9 @@
     },
     "maxInFlight": {
       "type": "number",
-      "description": "Most workers running at once (0 = unlimited)",
-      "default": 0,
-      "title": "Max workers in flight"
+      "title": "Max open worktrees",
+      "description": "Most worktrees open at once, counting done ones waiting for review (0 = unlimited). At the cap you get squirrels until a worker needs you.",
+      "default": 6
     },
     "moveToReview": {
       "type": "boolean",

@@ -35,4 +35,4 @@ The operator has ADD. They look at exactly one card at a time. Everything else r
 
 ## Between tickets
 
-Interleave one small, real distraction if the operator wants it: an article, a repository, or an unread chat message. One card, three actions (dismiss, look, send to self), then back to the next ticket.
+Interleave one small, real distraction if the operator wants it: an article, a repository, or an unread chat message. One card, four actions (dismiss, gist in place, open in browser, send to self), then back to the next ticket.

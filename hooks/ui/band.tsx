@@ -11,6 +11,9 @@ export function drawBand(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: st
   const { Box, Text } = ui
   return (
     <Box flexDirection="column">
+      <Text weight="bold" color="magenta">
+        NOW
+      </Text>
       {drawNow(ui, board, a, viewingAgent)}
       <Text dimColor>{statusLine(board)}</Text>
     </Box>
