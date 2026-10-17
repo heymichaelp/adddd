@@ -4,9 +4,9 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { AddddBoard, AddddSlackMsg, AddddSource, AddddSquirrel, AddddTicket, AddddWorker, PickMode } from '../types'
 import { parseStatus } from './parse'
 import { pick } from './pick'
-import { ago, atCapacity, inFlight, isActive, nowCard, openWorktrees, safeKey, statusLine } from './registry'
-import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, labelGithubIssue, listGithubIssues } from './sources/github'
-import { listLinearIssues, setLinearState } from './sources/linear'
+import { ago, atCapacity, breakDue, doneUnreviewed, elapsed, inFlight, isActive, needsHuman, nowCard, openWorktrees, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
+import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, createGithubIssue, labelGithubIssue, listGithubIssues } from './sources/github'
+import { createLinearIssue, listLinearIssues, setLinearState } from './sources/linear'
 import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
 import { isLife, makeLifeSquirrel, pickNudge } from './life'
 import { gistOf, huntSquirrel, openInBrowser, sendSlack, topicsOf } from './squirrel'
@@ -14,13 +14,13 @@ import { STATIC_PROMPTS, STATIC_REPLIES, suggestPrompts, suggestReplies } from '
 import { drawBand } from './ui/band'
 import { drawPane, type Actions } from './ui/pane'
 import { buildWorkerPrompt, starterPrompt, WORKER_SYSTEM_PROMPT } from './worker-prompt'
-import { baseBranch, ensureWorktree, isDirty, lastCommits, removeWorktree, touchedFiles } from './worktree'
+import { baseBranch, commitCount, ensureWorktree, isDirty, lastCommits, removeWorktree, touchedFiles } from './worktree'
 
 const PANE = 'adddd'
 const AGENT = 'adddd:worker'
 const RECONCILE_MS = 20000
 
-const EMPTY: AddddBoard = { workers: [], picked: null, squirrel: null, slackMsg: null, slackInbox: 0, capacity: { open: 0, max: 6 }, paused: false, backlogCount: 0, source: 'linear', note: null, now: 0 }
+const EMPTY: AddddBoard = { workers: [], picked: null, squirrel: null, slackMsg: null, slackInbox: 0, capacity: { open: 0, max: 6 }, paused: false, backlogCount: 0, source: 'linear', note: null, now: 0, startedAt: 0 }
 const board = atom({ plugin: 'adddd', key: 'board' } as const, EMPTY)
 
 type Options = {
@@ -35,6 +35,10 @@ type Options = {
   squirrels: boolean
   /** Share of squirrels that are off-screen nudges, 0..1. */
   lifeShare: number
+  /** Minutes without a break before the next card is a nudge to take one; 0 = off. */
+  breakEvery: number
+  /** No toast or OS notification while a card is already in front of you. */
+  quiet: boolean
   topics: string
   slackWebhookUrl: string
   slackToken: string
@@ -57,6 +61,8 @@ function readOptions(options: PluginOptions): Options {
     sounds: bool('sounds', true),
     squirrels: bool('squirrels', true),
     lifeShare: Math.min(1, Math.max(0, num('lifeShare', 1 / 3))),
+    breakEvery: Math.max(0, Math.floor(num('breakEvery', 90))),
+    quiet: bool('quiet', true),
     topics: str('topics', ''),
     slackWebhookUrl: str('slackWebhookUrl', ''),
     slackToken: str('slackToken', ''),
@@ -77,6 +83,9 @@ const USAGE = [
   '/adddd did|never   an off-screen card: you did the thing · never show that one again',
   '/adddd say <reply> · meh · browser   the Slack message in front of you · /adddd inbox checks now',
   '/adddd squirrel      fetch one now',
+  '/adddd idea <text>   file it in the backlog and stay on your card (later: file the squirrel in front of you)',
+  '/adddd standup       three lines on yesterday / today / blocked, copied for you',
+  '/adddd eod           what is open, plus a "tomorrow, start here" note you will see next time',
   '/adddd view [KEY]    put that worker\'s transcript in the main view · /adddd back',
   '/adddd reply KEY …   answer a worker without switching views',
   '/adddd review KEY · retry KEY · dismiss KEY · cleanup',
@@ -86,6 +95,7 @@ let opt: Options = readOptions({})
 
 let workers: AddddWorker[] = []
 let picked: AddddTicket | null = null
+let pickedAt = 0
 let paused = false
 let backlog: AddddTicket[] = []
 let source: AddddSource = opt.source
@@ -103,6 +113,17 @@ const SEEN_KEY = 'adddd:squirrels:seen'
 /** Off-screen nudges the operator never wants to see again; survives sessions. */
 let never: string[] = []
 const NEVER_KEY = 'adddd:life:never'
+/** Time awareness: when this session began, when you last stepped away, when you last typed. */
+let sessionStartedAt = 0
+let lastBreakAt = 0
+let lastPromptAt = 0
+let snoozedUntil = 0
+/** The off-screen card the hyperfocus guard served, so dismissing it snoozes the guard. */
+let guardCardId: string | null = null
+const BREAK_GAP_MS = 15 * 60000
+const SNOOZE_MS = 20 * 60000
+const LAST_SEEN_KEY = () => `adddd:lastSeen:${root}`
+const TOMORROW_KEY = () => `adddd:tomorrow:${root}`
 let slackMsg: AddddSlackMsg | null = null
 let slackInbox: AddddSlackMsg[] = []
 let slackSeen: SlackSeen = {}
@@ -136,6 +157,8 @@ async function publish($: EngineInterface): Promise<AddddBoard> {
     source,
     note,
     now,
+    startedAt: sessionStartedAt,
+    pickedAt,
   }
   await update($, board, () => snap)
   const busy = workers.some(isActive) || picked !== null
@@ -167,6 +190,7 @@ async function pickNext($: EngineInterface, skipping?: string): Promise<AddddTic
   }
   const candidates = skipping ? backlog.filter(t => t.key !== skipping) : backlog
   picked = pick(candidates, opt.pick) ?? null
+  pickedAt = await $.clock.now()
   if (picked) {
     picked.suggestions = [...STATIC_PROMPTS]
     void $.prompt.suggest({ text: starterPrompt() })
@@ -309,6 +333,7 @@ async function neverAgain($: EngineInterface): Promise<string> {
 async function didIt($: EngineInterface): Promise<string> {
   if (!squirrel) return 'no card in front of you.'
   const title = squirrel.title
+  if (isLife(squirrel)) lastBreakAt = await $.clock.now()
   sound($, 'done')
   await dismissSquirrel($)
   await publish($)
@@ -438,6 +463,10 @@ async function openSlack($: EngineInterface): Promise<string> {
 
 async function dismissSquirrel($: EngineInterface): Promise<void> {
   if (!squirrel) return
+  if (guardCardId && squirrel.id === guardCardId) {
+    guardCardId = null
+    snoozedUntil = (await $.clock.now()) + SNOOZE_MS
+  }
   await markSeen($, squirrel.url || squirrel.id)
   squirrel = null
   void restock($)
@@ -582,13 +611,125 @@ function isWorkerNotification(text: string): boolean {
 function announce($: EngineInterface, w: AddddWorker): void {
   const line =
     w.status === 'done'
-      ? `✅ ${w.key} done: ${w.summary ?? 'committed on ' + w.branch}`
+      ? `✅ ${w.key} done${w.checks ? ` (${w.checks})` : ''}: ${w.summary ?? 'committed on ' + w.branch}`
       : w.status === 'failed'
-        ? `💥 ${w.key} failed: ${w.question ?? ''}`
+        ? `⏸ ${w.key} stalled: ${w.question ?? ''}`
         : `🔔 ${w.key} needs you: ${w.question ?? ''}`
-  $.ui.toast(line.slice(0, 300), { timeoutMs: 10000 })
-  void $.ui.notify(line.slice(0, 300), { title: 'adddd' }).catch(() => undefined)
+  // one cue, not three, when a card is already in front of you (or you are inside a transcript)
+  const busyWithACard = viewing !== undefined || nowCard({ workers: workers.filter(x => x.key !== w.key), picked, squirrel, slackMsg }).kind === 'worker'
+  if (!(opt.quiet && busyWithACard)) {
+    $.ui.toast(line.slice(0, 300), { timeoutMs: 10000 })
+    void $.ui.notify(line.slice(0, 300), { title: 'adddd' }).catch(() => undefined)
+  }
   sound($, w.status === 'done' ? 'done' : 'resurface')
+}
+
+/** The hyperfocus guard: after breakEvery minutes without a break, the next card sends you away from the screen. */
+async function guardBreak($: EngineInterface, now: number): Promise<boolean> {
+  if (paused || squirrel || !breakDue(lastBreakAt, now, opt.breakEvery, snoozedUntil)) return false
+  const kind = nowCard({ workers, picked, squirrel, slackMsg }).kind
+  if (kind !== 'idle' && kind !== 'ticket') return false
+  const banned = new Set(never.map(slug => `life:${slug}`))
+  const n = pickNudge(new Set([...seen, ...banned]), new Date(now).getHours(), Math.random, banned)
+  if (!n) return false
+  squirrel = makeLifeSquirrel(n, now, inFlight(workers).length, `you have been here ${elapsed(lastBreakAt, now)} without a break.`)
+  guardCardId = squirrel.id
+  sound($, 'resurface')
+  return true
+}
+
+function sinceText(changed: readonly AddddWorker[]): string {
+  const word = (w: AddddWorker) => (w.status === 'done' ? 'done' : w.status === 'failed' ? 'stalled' : w.status === 'needs-human' ? 'asked a question' : w.status)
+  return changed.slice(0, 6).map(w => `${w.key} ${word(w)}`).join(' · ') + (changed.length > 6 ? ` · +${changed.length - 6}` : '')
+}
+
+/** Three lines for the humans who ask what you did yesterday. */
+async function standup($: EngineInterface): Promise<string> {
+  const now = await $.clock.now()
+  const f = standupFacts(workers, now)
+  const facts: string[] = []
+  for (const w of f.finished) facts.push(`finished: ${w.key} ${w.ticket.title}${w.summary ? ` — ${w.summary}` : ''}`)
+  for (const w of f.dispatched.filter(x => !f.finished.includes(x) && x.status === 'running')) facts.push(`started, still running: ${w.key} ${w.ticket.title}`)
+  for (const w of f.running.filter(x => !f.dispatched.includes(x))) facts.push(`in progress: ${w.key} ${w.ticket.title}`)
+  for (const w of f.waiting) facts.push(`waiting on me: ${w.key} ${w.ticket.title}${w.question ? ` — ${w.question}` : ''}`)
+  for (const w of [...f.finished, ...f.running].slice(0, 6)) {
+    const commits = await lastCommits($, w.worktree, w.base, w.branch).catch(() => [] as string[])
+    for (const c of commits.slice(0, 3)) facts.push(`commit on ${w.key}: ${c}`)
+  }
+  if (facts.length === 0) return 'nothing on the board since yesterday. honest standup: "same as yesterday, nothing blocked."'
+  const fallback = [
+    `yesterday: ${f.finished.map(w => w.key).join(', ') || 'kept things moving'}`,
+    `today: ${[...f.running, ...f.dispatched].map(w => w.key).filter((k, i, a) => a.indexOf(k) === i).join(', ') || 'next ticket off the backlog'}`,
+    `blocked: ${f.waiting.map(w => w.key).join(', ') || 'nothing'}`,
+  ].join('\n')
+  let text = fallback
+  try {
+    const r = await $.model.complete({
+      model: 'haiku',
+      prompt: `Write my standup in first person from these facts. Exactly three lines, starting "yesterday:", "today:", "blocked:". At most 25 words per line. Plain text, no bullets, no preamble.\n\n${facts.join('\n')}`,
+      maxTokens: 200,
+      timeoutMs: 20000,
+    })
+    if (r.isAnswered && /yesterday:/i.test(r.text)) text = r.text.trim()
+  } catch {
+    // the fallback is fine
+  }
+  const copied = await $.ui.copy({ text }).catch(() => ({ isCopied: false as const }))
+  return `${text}\n\n${copied.isCopied ? '(copied to your clipboard)' : ''}`.trim()
+}
+
+/** Stopping for the day: what is open, and a note your tomorrow-self reads first. */
+async function eod($: EngineInterface): Promise<string> {
+  const now = await $.clock.now()
+  const open = openWorktrees(workers)
+  const items = open.map(w => `${w.key} [${w.status === 'failed' ? 'stalled' : w.status}] ${w.ticket.title}${w.question ? ` — ${w.question}` : w.summary ? ` — ${w.summary}` : ''}`)
+  if (picked) items.push(`picked, no prompt yet: ${picked.key} ${picked.title}`)
+  const first = needsHuman(workers)[0] ?? doneUnreviewed(workers)[0] ?? inFlight(workers)[0]
+  let noteText = first
+    ? `tomorrow, start here: ${first.key} ${first.ticket.title} (${first.status === 'done' ? 'review it' : first.status === 'running' ? 'it may have finished overnight' : 'answer it'}).`
+    : 'tomorrow, start here: /adddd and take the first ticket it hands you.'
+  if (items.length > 0) {
+    try {
+      const r = await $.model.complete({
+        model: 'haiku',
+        prompt: `The operator is stopping for the day. From these open items write one short paragraph (at most 60 words) that begins with "tomorrow, start here:" and names the single first thing to do, then the rest in order. Second person, plain text, no pep talk.\n\n${items.join('\n')}`,
+        maxTokens: 160,
+        timeoutMs: 20000,
+      })
+      if (r.isAnswered && /tomorrow, start here/i.test(r.text)) noteText = r.text.trim()
+    } catch {
+      // the deterministic note is fine
+    }
+  }
+  await $.store.set(TOMORROW_KEY(), { text: noteText, at: now }).catch(() => undefined)
+  const head = items.length > 0 ? `open right now:\n${items.map(l => `- ${l}`).join('\n')}` : 'nothing open. clean slate.'
+  return `${head}\n\n${noteText}\n\nsaved. it will be the first thing you see next time. go.`
+}
+
+/** Files one idea in the backlog without leaving the card in front of you. */
+async function captureIdea($: EngineInterface, text: string): Promise<string> {
+  const now = await $.clock.now()
+  const card = nowCard({ workers, picked, squirrel, slackMsg })
+  let title = text.trim()
+  let body = ''
+  let fromSquirrel = false
+  if (!title && card.kind === 'squirrel' && !isLife(card.squirrel)) {
+    title = card.squirrel.title
+    body = `${card.squirrel.url}\n\n${card.squirrel.why}`
+    fromSquirrel = true
+  }
+  if (!title) return '/adddd idea <the thing you just thought of> · or /adddd later on a squirrel card to file the link'
+  const from =
+    card.kind === 'worker' ? `${card.worker.key}'s card` : card.kind === 'ticket' ? `${card.ticket.key}'s card` : card.kind === 'squirrel' ? 'a squirrel' : 'the board'
+  body = `${body ? body + '\n\n' : ''}captured by adddd from ${from} at ${new Date(now).toLocaleTimeString()}`
+  const filed =
+    source === 'github'
+      ? await createGithubIssue($, root, opt.githubRepo, title, body)
+      : await createLinearIssue($, opt.linearServer, opt.linearTeam, title, body)
+  backlog.push({ key: filed.key, id: filed.key, title, url: filed.url, source, priority: 0, createdAt: now })
+  if (fromSquirrel) await dismissSquirrel($)
+  await publish($)
+  return `💡 filed ${filed.key}${filed.url ? ` · ${filed.url}` : ''} · back to ${fromSquirrel ? 'the next card' : from}`
 }
 
 async function refreshTouched($: EngineInterface, w: AddddWorker): Promise<boolean> {
@@ -617,13 +758,14 @@ async function reconcile($: EngineInterface): Promise<void> {
     if (!a) continue
     if (a.status === 'failed' || a.status === 'killed') {
       w.status = 'failed'
-      w.question = `the worker was ${a.status}`
+      w.question = a.status === 'killed' ? 'the worker was stopped; type a prompt to run it again in the same worktree' : 'the worker hit an error; type a prompt to run it again'
       w.updatedAt = now
       announce($, w)
     }
   }
   for (const w of workers.filter(isActive)) await refreshTouched($, w)
   await idleFill($)
+  await guardBreak($, now)
   await publish($)
 }
 
@@ -633,7 +775,7 @@ function statusText(now: number): string {
     .filter(w => w.status !== 'dismissed')
     .map(w => {
       const tail = w.status === 'done' ? w.summary ?? '' : w.question ?? w.summary ?? ''
-      return `- ${w.key} [${w.status}] ${w.ticket.title} · ${w.branch} · ${ago(w.updatedAt, now)} ago · ${w.touched.length} files${tail ? `\n    ${tail}` : ''}`
+      return `- ${w.key} [${w.status === 'failed' ? 'stalled' : w.status}] ${w.ticket.title} · ${w.branch} · ${ago(w.updatedAt, now)} ago · ${w.touched.length} files${tail ? `\n    ${tail}` : ''}`
     })
   if (picked) lines.push(`- picked, waiting for your prompt: ${picked.key} ${picked.title}`)
   lines.push(`backlog: ${backlog.length} · source: ${source}${paused ? ' · paused' : ''}`)
@@ -738,7 +880,34 @@ export const register: Register = (on, options) => {
       w.agentId = undefined
       if (w.status === 'running' || w.status === 'needs-human') {
         w.status = 'failed'
-        w.question = 'this worker belonged to a previous session; type a prompt to run it again in the same worktree, or /adddd review it'
+        w.question = 'this worker belonged to a previous session; type a prompt to pick it up again in the same worktree, or /adddd review it'
+      }
+    }
+    sessionStartedAt = await $.clock.now()
+    lastBreakAt = sessionStartedAt
+    lastPromptAt = sessionStartedAt
+    snoozedUntil = 0
+    {
+      const bits: string[] = []
+      try {
+        const saved = (await $.store.get(TOMORROW_KEY())) as { text?: string } | undefined
+        if (saved?.text) {
+          bits.push(`🌅 ${saved.text}`)
+          await $.store.delete(TOMORROW_KEY())
+        }
+      } catch {
+        // no note waiting
+      }
+      try {
+        const lastSeen = (await $.store.get(LAST_SEEN_KEY())) as number | undefined
+        const changed = typeof lastSeen === 'number' ? sinceYouLeft(workers, lastSeen) : []
+        if (changed.length > 0) bits.push(`while you were gone: ${sinceText(changed)}`)
+      } catch {
+        // first time here
+      }
+      if (bits.length > 0) {
+        note = bits.join(' · ').slice(0, 400)
+        $.ui.toast(note, { timeoutMs: 15000 })
       }
     }
     try {
@@ -840,6 +1009,19 @@ export const register: Register = (on, options) => {
         if (!slackMsg && serveSlack()) await publish($)
         return { text: `💬 ${n} new · ${slackInbox.length + (slackMsg ? 1 : 0)} waiting${slackMsg ? ` · in front: ${slackMsg.userName}: ${slackMsg.text.slice(0, 80)}` : ''}` }
       }
+      case 'idea':
+      case 'park':
+      case 'later':
+        try {
+          return { text: await captureIdea($, arg) }
+        } catch (err) {
+          return { text: `could not file it: ${(err as Error)?.message ?? String(err)} · your words: ${arg}` }
+        }
+      case 'standup':
+        return { text: await standup($) }
+      case 'eod':
+      case 'stop':
+        return { text: await eod($) }
       case 'did':
       case 'done!':
         return { text: await didIt($) }
@@ -963,6 +1145,11 @@ export const register: Register = (on, options) => {
       const w = workers.find(x => (x.agentId && e.text.includes(x.agentId)) || e.text.includes(`adddd-${safeKey(x.key)}`))
       return { drop: w ? `📬 ${w.key} reported in · ${w.status} · see the board` : '📬 a worker reported in · see the board' }
     }
+    if (loaded && e.origin.kind === 'composer') {
+      const now = await $.clock.now()
+      if (lastPromptAt && now - lastPromptAt >= BREAK_GAP_MS) lastBreakAt = now
+      lastPromptAt = now
+    }
     if (!loaded || viewing || e.command || e.isMeta || e.origin.kind !== 'composer') return next(e)
     const text = e.text.trim()
     if (!text || text.startsWith('/')) return next(e)
@@ -1016,15 +1203,17 @@ export const register: Register = (on, options) => {
         const now = await $.clock.now()
         if (e.reason === 'error' || e.reason === 'refusal') {
           w.status = 'failed'
-          w.question = `the worker ended on ${e.reason}`
+          w.question = `the worker stopped on ${e.reason === 'refusal' ? 'a refusal' : 'an error'}; type a prompt to run it again`
           w.summary = e.answer.slice(0, 200)
         } else if (e.reason === 'aborted') {
           w.status = 'failed'
-          w.question = 'the worker was interrupted (a /clear or a stop); type a prompt to run it again in the same worktree'
+          w.question = 'the worker was interrupted (a /clear or a stop); type a prompt to pick it up again in the same worktree'
         } else {
           const parsed = parseStatus(e.answer)
           w.summary = parsed.summary
           w.question = parsed.question
+          w.soFar = parsed.soFar
+          w.checks = parsed.checks
           w.status = parsed.status === 'done' ? 'done' : 'needs-human'
           if (w.status === 'needs-human') {
             w.suggestions = [...STATIC_REPLIES]
@@ -1059,6 +1248,7 @@ export const register: Register = (on, options) => {
 
   on('session.end', async ($, e, next) => {
     if (loaded) await $.store.set(storeKey, { workers, picked, source } satisfies Persisted).catch(() => undefined)
+    if (loaded) await $.store.set(LAST_SEEN_KEY(), await $.clock.now()).catch(() => undefined)
     if (e.reason === 'clear')
       $.clock.after(600, () => {
         void (async () => {

@@ -1,7 +1,7 @@
 import type { Elements, RenderElement } from 'claude-code'
 
 import type { AddddBoard, AddddWorker } from '../../types'
-import { ago, doneUnreviewed, inFlight, needsHuman, nowCard, overlapsOf } from '../registry'
+import { ago, doneUnreviewed, elapsed, inFlight, needsHuman, nowCard, overlapsOf } from '../registry'
 
 export type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
@@ -219,7 +219,10 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
             </Button>
           </Box>
         ))}
-        <Text dimColor>press a number, or type your own prompt and Enter. it ships to a worktree and you never see it again (until it needs you).</Text>
+        <Text dimColor>
+          press a number, or type your own prompt and Enter. it ships to a worktree and you never see it again (until it needs you).
+          {board.now - (board.pickedAt ?? board.now) >= 120000 ? ` · picked ${elapsed(board.pickedAt ?? board.now, board.now)} ago` : ''}
+        </Text>
         <Box gap={1}>
           <Button key="skip" hotkey="0" plain onPress={a.skip}>
             skip this ticket
@@ -233,7 +236,9 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
   }
   const w = card.worker
   const color = w.status === 'done' ? 'green' : w.status === 'failed' ? 'red' : 'yellow'
-  const head = w.status === 'done' ? 'done, review me' : w.status === 'failed' ? 'failed' : 'needs you'
+  const head = w.status === 'done' ? 'done, review me' : w.status === 'failed' ? 'stalled' : 'needs you'
+  const touching = w.touched.length > 0 ? `${w.touched.slice(0, 3).join(', ')}${w.touched.length > 3 ? ` (+${w.touched.length - 3})` : ''}` : ''
+  const checksBad = /✘|fail/i.test(w.checks ?? '')
   return (
     <Box flexDirection="column">
       <Text>
@@ -242,13 +247,18 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
         </Text>{' '}
         {head} <Text dimColor>· {ago(w.updatedAt, board.now)} · {w.branch}</Text>
       </Text>
+      <Text dimColor>you said: "{w.prompt.length > 120 ? w.prompt.slice(0, 117) + '…' : w.prompt}"</Text>
+      {w.soFar ? <Text dimColor>so far: {w.soFar}</Text> : null}
       {w.summary ? <Text dimColor>{w.summary}</Text> : null}
       {w.status !== 'done' && w.question ? <Text color={color}>"{w.question}"</Text> : null}
+      {w.status === 'done' && w.checks ? <Text color={checksBad ? 'red' : 'green'}>checks: {w.checks}</Text> : null}
+      {w.status === 'done' && !w.checks ? <Text color="yellow">checks: the worker did not say what it ran</Text> : null}
+      {touching ? <Text dimColor>{w.status === 'done' ? 'start here: ' : 'touching: '}{touching}</Text> : null}
       <Text dimColor>
         {w.status === 'done'
           ? 'press a number, or type a follow-up and it resumes · /adddd review ' + w.key
           : w.status === 'failed'
-            ? 'press a number, or type a new prompt to re-run it'
+            ? 'press a number, or type a prompt to pick it up again'
             : 'press a number, or type your own reply and Enter'}
       </Text>
       {w.status === 'needs-human'
@@ -273,12 +283,12 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
         ) : null}
         {w.status === 'failed' ? (
           <Button key={`retry-${w.key}`} hotkey="1" plain onPress={() => a.retry(w)}>
-            run it again
+            pick it up again
           </Button>
         ) : null}
         {w.status === 'failed' ? (
           <Button key={`giveup-${w.key}`} hotkey="2" plain onPress={() => a.dismiss(w)}>
-            give up
+            park it
           </Button>
         ) : null}
         {w.status === 'needs-human' ? (

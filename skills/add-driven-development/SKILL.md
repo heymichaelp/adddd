@@ -36,3 +36,5 @@ The operator has ADD. They look at exactly one card at a time. Everything else r
 ## Between tickets
 
 Interleave one small, real distraction if the operator wants it: an article, a repository, or an unread chat message. One card, four actions (dismiss, gist in place, open in browser, send to self), then back to the next ticket. Some distractions are off-screen nudges (text your mom, get a snack, but hurry); offer "did it" and "never again", and honour "never again" permanently.
+
+Re-entry is the expensive part for the operator, so every card that comes back shows what they originally asked, what was done so far, and what files are involved. Let them file an idea into the backlog from any card without leaving it. Keep a visible clock, and after about ninety minutes without a break make the next card an off-screen nudge (a worker that needs them still wins). Done cards carry a checks line (tests, typecheck, build) so review starts from evidence. Say "stalled" and "park it", never "failed" and "give up".

@@ -61,7 +61,9 @@ export function overlapsOf(workers: readonly AddddWorker[]): Record<string, Reco
   return out
 }
 
-export function statusLine(board: Pick<AddddBoard, 'workers' | 'backlogCount' | 'paused'> & Partial<Pick<AddddBoard, 'capacity'>>): string {
+export function statusLine(
+  board: Pick<AddddBoard, 'workers' | 'backlogCount' | 'paused'> & Partial<Pick<AddddBoard, 'capacity' | 'startedAt' | 'now'>>,
+): string {
   const running = inFlight(board.workers).length
   const human = needsHuman(board.workers).length
   const done = doneUnreviewed(board.workers).length
@@ -71,7 +73,53 @@ export function statusLine(board: Pick<AddddBoard, 'workers' | 'backlogCount' | 
   if (done) bits.push(`${done} done`)
   bits.push(`${board.backlogCount} in backlog`)
   if (board.paused) bits.push('paused')
+  if (board.startedAt && board.now && board.now - board.startedAt >= 60000) bits.push(`${elapsed(board.startedAt, board.now)} at it`)
   return `adddd · ${bits.join(' · ')}`
+}
+
+/** "1h35m" style, for how long something has been going on. */
+export function elapsed(from: number, now: number): string {
+  const m = Math.max(0, Math.floor((now - from) / 60000))
+  if (m < 60) return `${m}m`
+  const h = Math.floor(m / 60)
+  return `${h}h${String(m % 60).padStart(2, '0')}m`
+}
+
+/**
+ * The hyperfocus guard: true when the operator has gone `breakEvery` minutes without a break
+ * and is not snoozing. breakEvery 0 turns it off.
+ */
+export function breakDue(lastBreakAt: number, now: number, breakEvery: number, snoozedUntil = 0): boolean {
+  if (breakEvery <= 0) return false
+  if (now < snoozedUntil) return false
+  return now - lastBreakAt >= breakEvery * 60000
+}
+
+export type StandupFacts = {
+  dispatched: AddddWorker[]
+  finished: AddddWorker[]
+  waiting: AddddWorker[]
+  running: AddddWorker[]
+}
+
+/** What happened since local midnight yesterday, from the registry alone. */
+export function standupFacts(workers: readonly AddddWorker[], now: number): StandupFacts {
+  const since = new Date(now)
+  since.setHours(0, 0, 0, 0)
+  since.setDate(since.getDate() - 1)
+  const from = since.getTime()
+  const recent = workers.filter(w => w.dispatchedAt >= from || w.updatedAt >= from)
+  return {
+    dispatched: recent.filter(w => w.dispatchedAt >= from),
+    finished: recent.filter(w => (w.status === 'done' || w.status === 'dismissed') && w.updatedAt >= from),
+    waiting: workers.filter(w => w.status === 'needs-human' || w.status === 'failed'),
+    running: workers.filter(w => w.status === 'running'),
+  }
+}
+
+/** Something that changed since the operator last looked, newest first. */
+export function sinceYouLeft(workers: readonly AddddWorker[], lastSeenAt: number): AddddWorker[] {
+  return workers.filter(w => w.updatedAt > lastSeenAt && w.status !== 'running').sort((a, b) => b.updatedAt - a.updatedAt)
 }
 
 export function ago(from: number, now: number): string {

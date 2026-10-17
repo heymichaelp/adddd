@@ -7,13 +7,22 @@ import { drawNow, type Actions, type Ui } from './pane'
 /** The band above the prompt: the NOW card, or nothing when there is nothing to do. */
 export function drawBand(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: string | undefined): RenderElement | null {
   const card = nowCard(board)
-  if (card.kind === 'idle' && !viewingAgent) return null
   const { Box, Text } = ui
+  if (card.kind === 'idle' && !viewingAgent) {
+    if (!board.note) return null
+    return (
+      <Box flexDirection="column">
+        <Text color="cyan">{board.note}</Text>
+        <Text dimColor>{statusLine(board)}</Text>
+      </Box>
+    )
+  }
   return (
     <Box flexDirection="column">
       <Text weight="bold" color="magenta">
         NOW
       </Text>
+      {board.note && card.kind !== 'worker' ? <Text color="cyan">{board.note}</Text> : null}
       {drawNow(ui, board, a, viewingAgent)}
       <Text dimColor>{statusLine(board)}</Text>
     </Box>

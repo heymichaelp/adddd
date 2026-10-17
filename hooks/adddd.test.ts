@@ -3,14 +3,14 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { AddddTicket, AddddWorker } from '../types'
 import { parseStatus } from './parse'
 import { pick, weightOf } from './pick'
-import { atCapacity, nowCard, openWorktrees, overlapsOf, safeKey, statusLine } from './registry'
+import { atCapacity, breakDue, elapsed, nowCard, openWorktrees, overlapsOf, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
 import { parseIssueList, toTicket as linearTicket } from './sources/linear'
 import { NUDGES, makeLifeSquirrel, pickNudge, timeOfDay } from './life'
 import { parseBullets, parseCuration, parseDevto, parseGithub, parseHn, stripHtml, topicsFromFiles, topicsFromPackageJson } from './squirrel'
 import { parseConversations, parseHistory, parseMentions, plainText, tsNewer } from './slack'
 import { parseList } from './suggest'
-import { buildWorkerPrompt } from './worker-prompt'
+import { buildWorkerPrompt, WORKER_SYSTEM_PROMPT } from './worker-prompt'
 
 const ticket = (key: string, priority = 0): AddddTicket => ({ key, id: key, title: `do ${key}`, url: '', source: 'linear', priority, createdAt: 0 })
 const worker = (key: string, status: AddddWorker['status'], extra: Partial<AddddWorker> = {}): AddddWorker => ({
@@ -237,5 +237,60 @@ describe('off-screen squirrels', () => {
   })
   test('time of day buckets', () => {
     expect([timeOfDay(7), timeOfDay(13), timeOfDay(19), timeOfDay(1)]).toEqual(['morning', 'day', 'evening', 'late'])
+  })
+})
+
+describe('re-entry and review gates', () => {
+  test('parseStatus reads so-far and checks', () => {
+    const p = parseStatus('ADDDD: needs-human\nsummary: halfway\nso-far: added the test, ruled out a regex approach\nquestion: uppercase or not?')
+    expect(p.soFar).toBe('added the test, ruled out a regex approach')
+    expect(p.question).toBe('uppercase or not?')
+    const d = parseStatus('ADDDD: done\nsummary: shipped\nchecks: tests ✔ · typecheck ✔ · build –')
+    expect(d.checks).toBe('tests ✔ · typecheck ✔ · build –')
+    expect(d.summary).toBe('shipped')
+  })
+  test('the worker prompt asks for both lines', () => {
+    expect(WORKER_SYSTEM_PROMPT).toContain('so-far:')
+    expect(WORKER_SYSTEM_PROMPT).toContain('checks:')
+  })
+})
+
+describe('time awareness', () => {
+  test('the status line shows how long you have been at it', () => {
+    const base = { workers: [], backlogCount: 0, paused: false, capacity: { open: 0, max: 6 } }
+    expect(statusLine({ ...base, startedAt: 1000, now: 31000 })).not.toContain('at it')
+    expect(statusLine({ ...base, startedAt: 1000, now: 1000 + 95 * 60000 })).toContain('1h35m at it')
+    expect(statusLine({ ...base, startedAt: 0, now: 95 * 60000 })).not.toContain('at it')
+  })
+  test('elapsed formats minutes and hours', () => {
+    expect(elapsed(0, 5 * 60000)).toBe('5m')
+    expect(elapsed(0, 125 * 60000)).toBe('2h05m')
+  })
+  test('breakDue honours the interval, the snooze and off', () => {
+    const m = 60000
+    expect(breakDue(0, 89 * m, 90)).toBe(false)
+    expect(breakDue(0, 90 * m, 90)).toBe(true)
+    expect(breakDue(0, 90 * m, 90, 100 * m)).toBe(false)
+    expect(breakDue(0, 90 * m, 0)).toBe(false)
+  })
+  test('standupFacts looks back to yesterday midnight', () => {
+    const now = new Date(2026, 9, 17, 10, 0).getTime()
+    const yesterday = new Date(2026, 9, 16, 15, 0).getTime()
+    const lastWeek = new Date(2026, 9, 10, 15, 0).getTime()
+    const ws = [
+      worker('A', 'done', { dispatchedAt: yesterday, updatedAt: yesterday }),
+      worker('B', 'running', { dispatchedAt: lastWeek, updatedAt: lastWeek }),
+      worker('C', 'needs-human', { dispatchedAt: lastWeek, updatedAt: lastWeek }),
+      worker('D', 'dismissed', { dispatchedAt: lastWeek, updatedAt: lastWeek }),
+    ]
+    const f = standupFacts(ws, now)
+    expect(f.finished.map(w => w.key)).toEqual(['A'])
+    expect(f.dispatched.map(w => w.key)).toEqual(['A'])
+    expect(f.running.map(w => w.key)).toEqual(['B'])
+    expect(f.waiting.map(w => w.key)).toEqual(['C'])
+  })
+  test('sinceYouLeft lists what changed, newest first, never running ones', () => {
+    const ws = [worker('A', 'done', { updatedAt: 50 }), worker('B', 'needs-human', { updatedAt: 70 }), worker('C', 'running', { updatedAt: 90 }), worker('D', 'done', { updatedAt: 10 })]
+    expect(sinceYouLeft(ws, 40).map(w => w.key)).toEqual(['B', 'A'])
   })
 })

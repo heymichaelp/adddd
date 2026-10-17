@@ -58,8 +58,8 @@ export function pickNudge(
 }
 /** Seen is soft (least-recently shown wins); banned is hard (never returned). */
 
-export function makeLifeSquirrel(n: Nudge, now: number, busy: number): AddddSquirrel {
-  const blurb = busy > 0 ? `${busy} worker${busy === 1 ? ' is' : 's are'} busy. you are not.` : 'nothing is waiting on you.'
+export function makeLifeSquirrel(n: Nudge, now: number, busy: number, blurbOverride?: string): AddddSquirrel {
+  const blurb = blurbOverride ?? (busy > 0 ? `${busy} worker${busy === 1 ? ' is' : 's are'} busy. you are not.` : 'nothing is waiting on you.')
   return { id: `life:${n.slug}`, title: n.title, url: '', blurb, source: 'life', topic: 'off-screen', why: n.why, foundAt: now }
 }
 

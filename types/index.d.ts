@@ -30,6 +30,10 @@ export type AddddWorker = {
   status: AddddStatus
   summary?: string
   question?: string
+  /** The worker's re-entry note: what it already did and ruled out. */
+  soFar?: string
+  /** What the worker verified before calling it done, e.g. "tests ✔ · typecheck ✔". */
+  checks?: string
   touched: string[]
   /** Ready-made replies to the worker's question; a number key sends one. */
   suggestions?: string[]
@@ -82,6 +86,10 @@ export type AddddBoard = {
   source: AddddSource
   note: string | null
   now: number
+  /** When this Claude Code session started (for the clock in the status line). */
+  startedAt: number
+  /** When the picked ticket was put in front of you. */
+  pickedAt?: number
 }
 
 declare module 'claude-code' {

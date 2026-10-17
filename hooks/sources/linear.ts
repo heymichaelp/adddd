@@ -80,6 +80,19 @@ export async function listLinearIssues($: EngineInterface, server: string, team:
     .filter((t): t is AddddTicket => t !== undefined)
 }
 
+/** Files a new issue in the backlog. Resolves its key and url, or throws with the server's complaint. */
+export async function createLinearIssue($: EngineInterface, server: string, team: string, title: string, description: string): Promise<{ key: string; url: string }> {
+  const args: Obj = { title, description }
+  if (team) args.team = team
+  const result = await $.mcp.call(server, 'create_issue', args)
+  const text = textOf(result)
+  if (result.isError) throw new Error(`Linear create_issue: ${text.slice(0, 200) || 'error'}`)
+  const issue = parseIssueList(text)[0] ?? (() => { try { const d: unknown = JSON.parse(text); return isObj(d) ? (isObj(d.issue) ? d.issue : d) : {} } catch { return {} } })()
+  const key = typeof issue.identifier === 'string' ? issue.identifier : text.match(/\b[A-Z][A-Z0-9]+-\d+\b/)?.[0] ?? 'LIN-?'
+  const url = typeof issue.url === 'string' ? issue.url : text.match(/https?:\/\/linear\.app\/\S+/)?.[0] ?? ''
+  return { key, url }
+}
+
 /** Moves an issue to a workflow state by name. Resolves the error text, or undefined when it went through. */
 export async function setLinearState($: EngineInterface, server: string, ticket: AddddTicket, state: string): Promise<string | undefined> {
   const result = await $.mcp.call(server, 'update_issue', { id: ticket.id, state })

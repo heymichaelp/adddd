@@ -1,6 +1,6 @@
 {
   "name": "adddd",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "license": "MIT",
   "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited workers in the background.",
   "types": "./types/index.d.ts",
@@ -80,6 +80,18 @@
       "title": "Off-screen squirrels",
       "description": "Share of squirrels that nudge you away from the screen (text your mom, get a snack): 0 = never, 1 = always. 'never again' on a card retires that nudge for good",
       "default": 0.33
+    },
+    "breakEvery": {
+      "type": "number",
+      "title": "Break reminder (minutes)",
+      "description": "After this many minutes without stepping away, the next card nudges you off the screen (0 = off). A worker that needs you still comes first",
+      "default": 90
+    },
+    "quiet": {
+      "type": "boolean",
+      "title": "Quiet while a card is in front",
+      "description": "No toast or OS notification when something comes back while you are already looking at a card; the sound still plays",
+      "default": true
     },
     "topics": {
       "type": "string",

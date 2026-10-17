@@ -35,6 +35,9 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 | `/adddd meh` / `gist` / `slack` / `browser` | the squirrel in front of you: dismiss, three-bullet gist on the card, DM yourself, open in your browser (`look` and `open` are aliases) |
 | `/adddd squirrel` | fetch one now |
 | `/adddd did` / `never` | an off-screen card: you did the thing · retire that nudge for good |
+| `/adddd idea <text>` / `later` | file a backlog ticket without leaving your card · file the squirrel in front of you |
+| `/adddd standup` | three lines on yesterday / today / blocked, drafted from the board and copied |
+| `/adddd eod` | what is open, plus a "tomorrow, start here" note you see first next time |
 | `/adddd say <reply>` / `meh` / `browser` / `inbox` | the unread Slack message in front of you: reply, mark read, open the permalink, check now |
 | `/adddd view [KEY]` / `back` | put a worker's transcript in the main view, and return |
 | `/adddd reply KEY …` | answer a worker explicitly (a plain prompt does this too, see below) |
@@ -54,6 +57,14 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 - NOW is a picked ticket: your prompt dispatches it.
 
 **Squirrels.** Between tickets a 🐿️ card shows up: one real link (a Hacker News story, a GitHub repo, a dev.to post) on a topic inferred from your repo's dependencies and languages, with one line from the model on why you might care. `/adddd meh` dismisses it, `gist` fetches the page and puts a three-bullet gist on the card (you stay in the terminal), `browser` opens it in your browser, `slack` DMs it to you (set a Slack incoming webhook pointed at your own DM under `/config` → adddd) and moves on. Typing a prompt skips straight past it to the ticket. Set `topics` in `/config` to steer the hunt, or turn `squirrels` off.
+
+**Re-entry.** A card that comes back shows what you said when you dispatched it, the worker's one-line `so far` (what it did and ruled off), and the files it is touching, so you do not rebuild the ticket in your head. When you come back to a session, the band says what happened while you were gone. `/adddd eod` when you stop writes a "tomorrow, start here" note that is the first thing you see next time.
+
+**Capture.** `/adddd idea <text>` files a backlog ticket (GitHub issue labelled `adddd:idea`, or a Linear issue) with a note of which card you were on, and leaves you on that card. `/adddd later` on a squirrel files the link the same way. `/adddd standup` drafts three lines from the board and your branches' commits and copies them.
+
+**Time.** The status line shows how long you have been at it. After `breakEvery` minutes (default 90) without a break, the next card is an off-screen nudge that says so; `did it` counts as the break, `meh` snoozes it twenty minutes. A worker that needs you is never pre-empted by it. Typing after a gap of fifteen minutes or more also counts as a break.
+
+**Review gates.** Workers end with a `checks:` line (tests, typecheck, build) and the done card shows it in green or red, or says the worker did not report any. The card's `start here:` names the first touched file. Cards say *stalled* and *park it*, not failed and give up. With `quiet` on (default) nothing toasts or notifies while a card is already in front of you; the sound still plays.
 
 **Off-screen squirrels.** About one squirrel in three is not a link at all but a 🚪 nudge to leave the screen for a minute: *text your mom*, *get a snack, but hurry*, *refill your water*, *lie on the floor for two minutes*. They fit the hour (coffee in the morning, dinner in the evening, brush your teeth late). `did it` dismisses with a little fanfare, `meh` just dismisses, `slack me` DMs the reminder, and `never again` retires that nudge permanently (it is remembered across sessions). `lifeShare` in `/config` sets the share, 0 to 1.
 

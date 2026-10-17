@@ -4,6 +4,7 @@ import type { AddddTicket } from '../../types'
 
 export const GH_LABEL_PROGRESS = 'adddd:in-progress'
 export const GH_LABEL_REVIEW = 'adddd:review'
+export const GH_LABEL_IDEA = 'adddd:idea'
 
 type Obj = Record<string, unknown>
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -60,9 +61,25 @@ export async function listGithubIssues($: EngineInterface, root: string, repo: s
   if (!Array.isArray(data)) return []
   return data
     .filter(isObj)
-    .filter(issue => !labelsOf(issue).some(l => l.startsWith('adddd:')))
+    .filter(issue => !labelsOf(issue).some(l => l === GH_LABEL_PROGRESS || l === GH_LABEL_REVIEW))
     .map(toTicket)
     .filter((t): t is AddddTicket => t !== undefined)
+}
+
+/** Files a new issue. Resolves its key and url, or throws with gh's complaint. */
+export async function createGithubIssue($: EngineInterface, root: string, repo: string, title: string, body: string): Promise<{ key: string; url: string }> {
+  await $.process.run(['gh', 'label', 'create', GH_LABEL_IDEA, '--force', '--color', 'FBCA04', '--description', 'captured by adddd', ...repoArgs(repo)], {
+    cwd: root,
+    timeoutMs: 30000,
+  })
+  const ran = await $.process.run(['gh', 'issue', 'create', '--title', title, '--body', body, '--label', GH_LABEL_IDEA, ...repoArgs(repo)], {
+    cwd: root,
+    timeoutMs: 30000,
+  })
+  if (ran.exitCode !== 0) throw new Error(`gh issue create: ${ran.stderr.trim().slice(0, 200) || `exit ${ran.exitCode}`}`)
+  const url = ran.stdout.trim().split('\n').find(l => /^https?:\/\//.test(l)) ?? ''
+  const n = url.match(/\/(\d+)\s*$/)?.[1]
+  return { key: n ? `GH-${n}` : 'GH-?', url }
 }
 
 /** Adds one adddd label (creating it if needed) and drops the other. Resolves the error text, or undefined. */
