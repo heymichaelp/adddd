@@ -97,3 +97,7 @@ claude plugin validate .
 claude plugin test .
 node scripts/check-conformance.mjs
 ```
+
+## License
+
+MIT, see `LICENSE`.
