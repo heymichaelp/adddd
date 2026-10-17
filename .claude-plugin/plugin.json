@@ -1,0 +1,68 @@
+{
+  "name": "adddd",
+  "version": "0.1.0",
+  "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited workers in the background.",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "source": {
+      "type": "string",
+      "description": "Where tickets come from",
+      "default": "linear",
+      "options": [
+        "linear",
+        "github"
+      ],
+      "title": "Ticket source"
+    },
+    "linearServer": {
+      "type": "string",
+      "description": "Linear MCP server name as /mcp lists it",
+      "default": "linear",
+      "title": "Linear MCP server"
+    },
+    "linearTeam": {
+      "type": "string",
+      "description": "Linear team key to pull from (blank = all teams)",
+      "default": "",
+      "title": "Linear team key"
+    },
+    "githubRepo": {
+      "type": "string",
+      "description": "owner/repo for GitHub Issues (blank = gh infers from origin)",
+      "default": "",
+      "title": "GitHub repo"
+    },
+    "pick": {
+      "type": "string",
+      "description": "How the next ticket is chosen",
+      "default": "weighted",
+      "options": [
+        "weighted",
+        "random",
+        "priority"
+      ],
+      "title": "Picking strategy"
+    },
+    "maxInFlight": {
+      "type": "number",
+      "description": "Most workers running at once (0 = unlimited)",
+      "default": 0,
+      "title": "Max workers in flight"
+    },
+    "moveToReview": {
+      "type": "boolean",
+      "description": "Move tickets to In Progress on dispatch and In Review when done",
+      "default": true,
+      "title": "Sync ticket status"
+    },
+    "sounds": {
+      "type": "boolean",
+      "description": "Play chaos sounds (macOS only)",
+      "default": true,
+      "title": "Chaos sounds"
+    }
+  },
+  "author": {
+    "name": "heymichaelp"
+  }
+}
