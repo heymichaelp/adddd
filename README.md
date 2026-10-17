@@ -73,9 +73,23 @@ One hooks module (`hooks/register.tsx`), no server, no daemon:
 - A reconciler runs every 20 s: agent liveness, files touched per branch (`git diff --name-only base...branch` plus uncommitted), overlaps between worktrees.
 - The registry lives in the plugin store, so it survives `/clear` and restarts. `/clear` aborts running background agents though: those workers come back as *failed* with their worktree intact, and a typed prompt re-runs them. Workers from a previous session show the same way.
 
+## Agent Plugins conformance
+
+The package also follows [Agent Plugins 1.0.0](https://agent-plugins.org/specification), the vendor-neutral layout, so a conformant client can pick up its portable parts:
+
+| Path | Who reads it |
+| --- | --- |
+| `plugin.json` | any Agent Plugins client (closed manifest, `$schema` 1.0.0) |
+| `mcp.json` | any Agent Plugins client: the Linear server as `streamable-http` |
+| `skills/add-driven-development/` | any Agent Skills client: the workflow, usable without the mod |
+| `.claude-plugin/plugin.json`, `.mcp.json`, `hooks/`, `types/` | Claude Code only (its native layout; the hooks module is Claude Code's function-hooks API) |
+
+The two manifests carry the same name and version. `node scripts/check-conformance.mjs` checks the spec rules that matter for a package (manifest field set and name constraints, `mcp.json` variants and URL rules, skill frontmatter) and that the Claude Code manifest is in lockstep.
+
 ## Develop
 
 ```
 claude plugin validate .
 claude plugin test .
+node scripts/check-conformance.mjs
 ```

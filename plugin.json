@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "adddd",
+  "version": "0.2.0",
+  "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited background workers; the operator handles one card.",
+  "author": {
+    "name": "heymichaelp"
+  },
+  "repository": "https://github.com/heymichaelp/adddd",
+  "keywords": ["adhd", "add", "tickets", "worktrees", "linear", "github-issues", "background-agents", "claude-code"]
+}

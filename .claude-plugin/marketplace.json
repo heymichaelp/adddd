@@ -1,5 +1,14 @@
 {
   "name": "adddd",
-  "owner": { "name": "heymichaelp" },
-  "plugins": [{ "name": "adddd", "source": "./", "description": "ADD-driven development: one ticket, one prompt, one worktree at a time." }]
+  "owner": {
+    "name": "heymichaelp"
+  },
+  "plugins": [
+    {
+      "name": "adddd",
+      "source": "./",
+      "description": "ADD-driven development: one ticket, one prompt, one worktree at a time."
+    }
+  ],
+  "description": "adddd: ADD-driven development for Claude Code"
 }
