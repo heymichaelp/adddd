@@ -666,7 +666,7 @@ async function standup($: EngineInterface): Promise<string> {
   try {
     const r = await $.model.complete({
       model: 'haiku',
-      prompt: `Write my standup in first person from these facts. Exactly three lines, starting "yesterday:", "today:", "blocked:". At most 25 words per line. Plain text, no bullets, no preamble.\n\n${facts.join('\n')}`,
+      prompt: `Write my standup in first person from these facts. Exactly three lines, starting "yesterday:", "today:", "blocked:". At most 25 words per line. Plain text, no bullets, no preamble. Finished branches get reviewed by me; never suggest pushing or opening pull requests.\n\n${facts.join('\n')}`,
       maxTokens: 200,
       timeoutMs: 20000,
     })
@@ -692,7 +692,7 @@ async function eod($: EngineInterface): Promise<string> {
     try {
       const r = await $.model.complete({
         model: 'haiku',
-        prompt: `The operator is stopping for the day. From these open items write one short paragraph (at most 60 words) that begins with "tomorrow, start here:" and names the single first thing to do, then the rest in order. Second person, plain text, no pep talk.\n\n${items.join('\n')}`,
+        prompt: `The operator is stopping for the day. From these open items write one short paragraph (at most 60 words) that begins with "tomorrow, start here:" and names the single first thing to do, then the rest in order. Second person, plain text, no pep talk. Done branches are reviewed by the operator; never suggest pushing or opening pull requests.\n\n${items.join('\n')}`,
         maxTokens: 160,
         timeoutMs: 20000,
       })
@@ -1114,6 +1114,11 @@ export const register: Register = (on, options) => {
       case 'cleanup': {
         const out: string[] = []
         for (const w of workers.filter(x => x.status === 'dismissed')) {
+          if (!(await $.fs.stat(w.worktree).catch(() => undefined))) {
+            out.push(`forgot ${w.key}: its worktree is already gone`)
+            workers = workers.filter(x => x.key !== w.key)
+            continue
+          }
           if (await isDirty($, w.worktree)) {
             out.push(`kept ${w.key}: worktree has uncommitted changes`)
             continue

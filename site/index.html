@@ -1,0 +1,727 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>adddd</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="adddd: ADD-driven development. A plugin for coding agents that hands you one ticket at a time and runs the rest in background worktrees. This site works the same way.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23c026d3'/%3E%3Ctext x='32' y='44' font-family='monospace' font-size='34' font-weight='700' text-anchor='middle' fill='white'%3E❯_%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap">
+<style>
+/* layout: a terminal. scrollback above, the NOW band and the ❯ composer at the bottom, a narrow IN FLIGHT pane on the right that drops below on a phone. */
+:root {
+  --bg: #fbf8f3;
+  --bg-2: #f1ece3;
+  --fg: #1d1a16;
+  --dim: #6f685d;
+  --rule: #ddd5c8;
+  --accent: #b41ec9;
+  --ok: #1f7a3a;
+  --warn: #9a6200;
+  --bad: #b3261e;
+  --info: #0b6e7a;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14120f; --bg-2: #1d1a16; --fg: #ece6da; --dim: #8f877a; --rule: #2d2823;
+    --accent: #e879f9; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --info: #67e8f9;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14120f; --bg-2: #1d1a16; --fg: #ece6da; --dim: #8f877a; --rule: #2d2823;
+  --accent: #e879f9; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --info: #67e8f9;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--fg);
+  font-family: var(--mono); font-size: 14px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0;
+  display: flex; flex-direction: column;
+}
+a { color: var(--info); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+a:hover { color: var(--accent); }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.dim { color: var(--dim); }
+.accent { color: var(--accent); }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .info { color: var(--info); }
+.b { font-weight: 700; }
+
+header.top {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+  padding-block: 10px 8px; border-bottom: 1px solid var(--rule);
+}
+header.top .mark { font-weight: 700; letter-spacing: 0.04em; }
+header.top .mark span { color: var(--accent); }
+header.top nav { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; }
+header.top nav a, header.top nav button { color: var(--dim); text-decoration: none; }
+header.top nav a:hover, header.top nav button:hover { color: var(--accent); }
+
+.term { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0 24px; }
+.main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+.scroll { flex: 1; min-height: 0; overflow-y: auto; padding-block: 14px 8px; display: flex; flex-direction: column; gap: 14px; }
+.scroll > * { max-width: 78ch; }
+.pane { border-left: 1px solid var(--rule); padding: 14px 0 14px 18px; overflow-y: auto; min-width: 0; font-size: 13px; }
+.pane h2 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
+.pane h2 .dim { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.pane ul { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.pane li { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pane li button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pane li button:hover { color: var(--accent); }
+.pane .foot { color: var(--dim); white-space: normal; }
+
+.band { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding-block: 10px; display: flex; flex-direction: column; gap: 4px; }
+.band .now { color: var(--accent); font-weight: 700; letter-spacing: 0.08em; font-size: 12px; }
+.card { display: flex; flex-direction: column; gap: 3px; max-width: 90ch; }
+.card .head { font-weight: 700; }
+.card .q { font-style: italic; }
+.keys { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
+.keys button { color: var(--fg); }
+.keys button:hover { color: var(--accent); }
+.keys button b { color: var(--accent); font-weight: 700; }
+.keys button.full { display: block; max-width: 100%; text-align: left; }
+.status { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+.composer { display: flex; align-items: center; gap: 8px; padding-block: 10px 12px; }
+.composer .prompt { color: var(--accent); font-weight: 700; }
+.composer input { flex: 1; min-width: 0; background: transparent; border: 0; font: inherit; color: var(--fg); padding: 2px 0; }
+.composer input::placeholder { color: var(--dim); opacity: 1; }
+.composer .hint { color: var(--dim); font-size: 12px; white-space: nowrap; }
+
+.entry { display: flex; flex-direction: column; gap: 4px; }
+.entry .cmd::before { content: "❯ "; color: var(--accent); font-weight: 700; }
+.entry .cmd { white-space: pre-wrap; }
+.entry .drop { color: var(--dim); }
+.entry .drop::before { content: "● "; }
+.reviewed { border-left: 2px solid var(--rule); padding-left: 12px; display: flex; flex-direction: column; gap: 6px; }
+.reviewed:target, .reviewed.flash { border-left-color: var(--accent); }
+.reviewed h3 { margin: 0; font-size: 14px; font-weight: 700; }
+.reviewed p { margin: 0; }
+.reviewed ul, .reviewed ol { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 3px; }
+.reviewed .meta { color: var(--dim); font-size: 12px; }
+pre { margin: 0; background: var(--bg-2); border: 1px solid var(--rule); border-radius: 4px; padding: 8px 10px; overflow-x: auto; font-size: 13px; }
+code { font-family: var(--mono); font-size: 0.95em; }
+pre code { font-size: inherit; }
+table { border-collapse: collapse; font-size: 13px; }
+td, th { text-align: left; vertical-align: top; padding: 3px 14px 3px 0; border-bottom: 1px solid var(--rule); }
+th { color: var(--dim); font-weight: 500; }
+.tablewrap { overflow-x: auto; }
+
+.toast {
+  position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  background: var(--bg-2); border: 1px solid var(--rule); color: var(--fg); padding: 8px 12px; border-radius: 4px;
+  max-width: min(60ch, calc(100vw - 32px)); font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); z-index: 20;
+}
+.banner { color: var(--dim); display: flex; flex-direction: column; gap: 2px; }
+.banner .wordmark { color: var(--fg); font-weight: 700; font-size: 20px; letter-spacing: 0.06em; line-height: 1.2; }
+.banner .wordmark span { color: var(--accent); }
+
+.read { max-width: 78ch; padding-block: 18px 40px; display: flex; flex-direction: column; gap: 22px; }
+.read h1 { margin: 0; font-size: 22px; letter-spacing: 0.04em; }
+.read .reviewed { border-left-color: var(--accent); }
+
+@media (max-width: 860px) {
+  .term { grid-template-columns: minmax(0, 1fr); overflow-y: auto; }
+  .main { min-height: 0; }
+  .scroll { flex: none; overflow: visible; min-height: 40vh; }
+  .pane { border-left: 0; border-top: 1px solid var(--rule); padding-left: 0; }
+  .composer .hint { display: none; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cursor { animation: blink 1.1s steps(2, start) infinite; }
+  @keyframes blink { to { visibility: hidden; } }
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="mark">adddd<span>.dev</span> <span class="dim">· ADD-driven development · a plugin for coding agents</span></div>
+  <nav>
+    <button type="button" id="soundBtn" aria-pressed="true">sound: on</button>
+    <button type="button" id="readBtn">read it plain</button>
+    <a href="https://github.com/heymichaelp/adddd">github</a>
+  </nav>
+</header>
+
+<div class="term" id="term">
+  <div class="main">
+    <div class="scroll" id="scroll">
+      <div class="banner">
+        <div class="wordmark">❯ add<span>dd</span></div>
+        <div>This site is a backlog. You are the operator. One card at a time; press a number or type a prompt and hit Enter. The content comes back when a worker is done with it. Squirrels are live from the web. Nudges are real; go do them.</div>
+        <div>Not in the mood? <a href="#read" id="readLink">Read it plain.</a></div>
+      </div>
+    </div>
+    <div class="band" id="band" aria-live="polite"></div>
+    <form class="composer" id="composer" autocomplete="off">
+      <span class="prompt">❯</span>
+      <input id="input" type="text" aria-label="your one prompt" placeholder="" spellcheck="false">
+      <span class="hint" id="hint">Enter sends · digits press buttons</span>
+    </form>
+  </div>
+  <aside class="pane" id="pane"></aside>
+</div>
+
+<section class="read" id="read" hidden></section>
+<noscript><section class="read"><p>This page is a small simulation and needs JavaScript. The plain text lives in the README at <a href="https://github.com/heymichaelp/adddd">github.com/heymichaelp/adddd</a>.</p></section></noscript>
+
+<script>
+(() => {
+'use strict';
+// ---------- the backlog: every ticket is a piece of the site ----------
+const INSTALL_LINEAR = `<p>In Claude Code, at the prompt:</p>
+<pre><code>/plugin install adddd --marketplace heymichaelp/adddd</code></pre>
+<p>Answer <code>y</code> to add the marketplace. Then <code>/config</code> → adddd → <code>source: linear</code>. The plugin lists Linear's MCP server itself; the first <code>/adddd</code> asks you to sign in to Linear once. Dispatch moves a ticket to In Progress, done moves it to In Review.</p>
+<p>Then <code>/adddd</code>. That is the whole setup. Other agent hosts: the repo follows the Agent Plugins 1.0.0 layout (<code>plugin.json</code>, <code>mcp.json</code>, <code>skills/</code>); point your host at it.</p>`;
+const INSTALL_GITHUB = `<p>In Claude Code, at the prompt:</p>
+<pre><code>/plugin install adddd --marketplace heymichaelp/adddd</code></pre>
+<p>Answer <code>y</code> to add the marketplace. Then <code>/config</code> → adddd → <code>source: github</code>. It uses the <code>gh</code> you are already logged in with and reads the repo's open issues; dispatch labels a ticket <code>adddd:in-progress</code>, done relabels it <code>adddd:review</code>.</p>
+<p>Then <code>/adddd</code>. That is the whole setup.</p>`;
+const INSTALL_BOTH = `<p>Fair. Install once, switch per repo:</p>
+<pre><code>/plugin install adddd --marketplace heymichaelp/adddd</code></pre>
+<p><code>/adddd source linear</code> or <code>/adddd source github</code> in each project, or set it under <code>/config</code> → adddd. Linear signs you in once through its MCP server; GitHub uses the <code>gh</code> you already have.</p>
+<p>Then <code>/adddd</code>. That is the whole setup.</p>`;
+
+const TICKETS = [
+  { key: 'SITE-1', kind: 'SPIKE', title: 'what is adddd.dev?', priority: 1, first: true,
+    prompts: ['Explain it like I have twelve seconds.', 'Just show me the loop.', 'Investigate first, then do the obvious thing.'],
+    done: { summary: 'wrote the one-paragraph answer; committed README.md', files: ['README.md'], checks: 'tests ✔ · typecheck ✔ · build –',
+      body: `<p><b>adddd</b> (ADD-driven development) is a plugin for coding agents, built for brains that work best with exactly one thing in front of them.</p>
+<p>It takes a ticket from your backlog (Linear or GitHub Issues), lets you type <b>one</b> prompt, ships that prompt plus the ticket to a background worker in its own git worktree, and immediately hands you the next ticket. A worktree comes back only when it needs a human: a question, a blocker, or done and ready for review. Unlimited workers in flight. You handle one card at a time.</p>
+<p>This site works the same way. You are the operator. The content is the backlog. Nothing here was written for you to scroll through; it was written for you to dispatch.</p>
+<p class="dim">Runs in Claude Code today. The repo also ships the Agent Plugins 1.0.0 layout and a portable skill, so other hosts can pick up the workflow as they add support.</p>` } },
+  { key: 'SITE-2', kind: 'DOCS', title: 'install it', priority: 2,
+    prompts: ['Shortest possible install. Nothing optional.', 'Walk me through it, I will forget a step.', 'Just the command, I know the rest.'],
+    ask: { soFar: 'read the README and the marketplace manifest; the install command is the same either way', question: 'which backlog do you use?',
+      replies: ['Linear', 'GitHub Issues', 'both, it depends on the day'] },
+    done: { summary: 'wrote the install steps for your backlog; committed INSTALL.md', files: ['INSTALL.md'], checks: 'tests – · typecheck – · build ✔', body: INSTALL_GITHUB,
+      byReply: [INSTALL_LINEAR, INSTALL_GITHUB, INSTALL_BOTH] } },
+  { key: 'SITE-3', kind: 'FEAT', title: 'the one-prompt loop', priority: 2,
+    prompts: ['Show me exactly what happens after I press Enter.', 'Do it the boring way. No cleverness.', 'Reproduce it, explain it, prove it.'],
+    done: { summary: 'documented the six steps of the loop; committed docs/loop.md', files: ['docs/loop.md', 'hooks/register.tsx'], checks: 'tests ✔ · typecheck ✔ · build –',
+      body: `<ol>
+<li><code>/adddd</code> picks a ticket: random, weighted toward priority. One card. Three drafted prompts under it.</li>
+<li>You press 1, 2 or 3, or type your own words and Enter. The prompt is dropped from your conversation on the way out, so the main context stays empty.</li>
+<li>A worker starts in its own git worktree on branch <code>adddd/&lt;KEY&gt;</code>. It is told which files the other workers are touching.</li>
+<li>The next ticket is in front of you before the worker has opened its first file.</li>
+<li>Cards come back: <span class="warn">needs you</span> (one question, three drafted replies), <span class="ok">done</span> (committed, a checks line, the file to start reviewing from), <span class="bad">stalled</span> (pick it up again in the same worktree).</li>
+<li>Workers never push, never open pull requests, never merge. You review; you ship.</li>
+</ol>
+<p>Every returning card starts with <i>you said:</i> and your own prompt, because by then you will have forgotten.</p>` } },
+  { key: 'SITE-4', kind: 'FEAT', title: 'squirrels and off-screen nudges', priority: 3,
+    prompts: ['Why would a focus tool hand me distractions?', 'Make it work, make it tested, commit.', 'Ship the smallest change that closes this.'],
+    done: { summary: 'explained squirrels, nudges and the break guard; committed docs/squirrels.md', files: ['docs/squirrels.md', 'hooks/squirrel.ts', 'hooks/life.ts'], checks: 'tests ✔ · typecheck ✔ · build –',
+      body: `<p>Between tickets you get one 🐿️ squirrel: a real link (Hacker News, a GitHub repo, a dev.to post) on a topic read from your own repo, picked by a small model with one line on why you might care. <code>meh</code>, <code>gist</code> (three bullets on the card, no tab), <code>slack me</code>, <code>browser</code>.</p>
+<p>About one in three squirrels is 🚪 off-screen: <i>text your mom</i>. <i>get a snack, but hurry</i>. <i>refill your water</i>. <i>lie on the floor for two minutes</i>. They fit the hour. <code>did it</code> dismisses with a little fanfare; <code>never again</code> retires that nudge for good, and it stays retired across sessions.</p>
+<p>After ninety minutes without a break, the next card is an off-screen nudge that says so. A worker that needs you is never pre-empted by it; a question waiting on you is the one interruption worth keeping.</p>
+<p>The reasoning: an ADHD brain is not short on attention, it is short on <i>choice</i> about where attention goes. Giving the brain one sanctioned, small, finite distraction beats the forty unsanctioned ones it will find on its own.</p>` } },
+  { key: 'SITE-5', kind: 'RESEARCH', title: 'what the ADHD literature says', priority: 3,
+    prompts: ['Only peer-reviewed sources. Cite them.', 'Summarise, then say what we changed because of it.', 'Investigate first, then do the obvious thing.'],
+    done: { summary: 'read five studies, mapped each to a feature; committed docs/research.md', files: ['docs/research.md'], checks: 'tests – · typecheck – · build –',
+      body: `<ul>
+<li><a href="https://people.cs.umass.edu/~mendres/papers/GetMeInTheGroove.pdf">"Get Me In The Groove" (ICSE 2025)</a>: 99 forum threads and a survey of 493 developers. Programmers with ADHD were 1.8 to 4.4 times more likely to struggle, worst of all with time management. → the clock in the status line, the break guard.</li>
+<li><a href="https://arxiv.org/abs/2609.21254">"Two's a Crowd" (2026)</a>, fourteen engineers with ADHD on AI pairing: an agent is a judgment-free partner, but notifications drive avoidance and reviewing a pile of generated code is where the dread lives. → quiet mode (one cue, not three), the checks line, the start-here file.</li>
+<li>Clinical write-ups on re-entry: the expensive part of an interruption is rebuilding "what was I doing, what did I rule out, what is next". A next-action note before stopping is called the highest-yield change. → <i>you said</i>, <i>so far</i>, <i>while you were gone</i>, <code>/adddd eod</code>.</li>
+<li>Working-memory externalisation: capture has to cost two taps or it will not happen. → <code>/adddd idea</code> files a ticket without leaving your card.</li>
+<li>Gamification evidence: streaks and loss-aversion fade within months and breed guilt; small immediate rewards are fine. → no streaks, ever. One fanfare on <i>did it</i>.</li>
+<li>Rejection sensitivity and self-criticism ("always my own hardest critic"). → cards say <i>stalled</i> and <i>park it</i>, never failed and give up.</li>
+</ul>` } },
+  { key: 'SITE-6', kind: 'DOCS', title: 'commands cheat sheet', priority: 4,
+    prompts: ['A table. Nothing else.', 'Group them by when I would use them.', 'Just fix it. Small diff, a test, a commit.'],
+    done: { summary: 'tabulated every verb; committed docs/commands.md', files: ['docs/commands.md'], checks: 'tests ✔ · typecheck ✔ · build –',
+      body: `<div class="tablewrap"><table>
+<tr><th>command</th><th>what it does</th></tr>
+<tr><td><code>/adddd</code></td><td>pick a ticket and wait for your one prompt</td></tr>
+<tr><td><code>/adddd next</code> · <code>pause</code> · <code>resume</code></td><td>skip the pick · stop picking · start again</td></tr>
+<tr><td><code>/adddd ok [KEY|all]</code></td><td>reviewed; free the slot</td></tr>
+<tr><td><code>/adddd reply KEY …</code> · <code>view KEY</code> · <code>back</code></td><td>answer a worker · open its transcript · return</td></tr>
+<tr><td><code>/adddd review KEY</code> · <code>retry KEY</code> · <code>dismiss KEY</code> · <code>cleanup</code></td><td>commits and files · run again · park · remove clean worktrees</td></tr>
+<tr><td><code>/adddd meh</code> · <code>gist</code> · <code>slack</code> · <code>browser</code></td><td>the squirrel in front of you</td></tr>
+<tr><td><code>/adddd did</code> · <code>never</code></td><td>the off-screen nudge in front of you</td></tr>
+<tr><td><code>/adddd idea …</code> · <code>later</code></td><td>file a ticket from any card · file the squirrel</td></tr>
+<tr><td><code>/adddd standup</code> · <code>eod</code></td><td>three lines on yesterday / today / blocked · stop for the day</td></tr>
+<tr><td><code>/adddd status</code> · <code>pane</code> · <code>source</code></td><td>the board as text · the board as a pane · linear or github</td></tr>
+</table></div>` } },
+  { key: 'SITE-7', kind: 'CHORE', title: 'the cap, standup and end of day', priority: 4,
+    prompts: ['Why six? Convince me.', 'Do it the boring way. No cleverness.', 'Make it work, make it tested, commit.'],
+    done: { summary: 'wrote up the cap and the two rituals; committed docs/rituals.md', files: ['docs/rituals.md'], checks: 'tests ✔ · typecheck ✔ · build –',
+      body: `<p><b>Six worktrees, then stop.</b> Running, waiting on you, and done-but-unreviewed all count. Review is the way to earn a new ticket, which keeps the review pile from becoming the thing you avoid. At the cap with nothing needing you, you get squirrels until something does. Set <code>maxInFlight</code> to taste; 0 is unlimited, which you will regret by Thursday.</p>
+<p><b><code>/adddd standup</code></b> drafts three lines (yesterday, today, blocked) from the board and your branches' commits, and copies them. Recalling yesterday is a working-memory task; the board remembers so you do not have to.</p>
+<p><b><code>/adddd eod</code></b> lists what is open and writes a "tomorrow, start here" note. It is the first thing you see next session, once, and then it is gone.</p>` } },
+  { key: 'SITE-8', kind: 'BUG', title: 'will it push my code somewhere?', priority: 3,
+    prompts: ['Reproduce it, fix it, prove it with a test.', 'List every network call it makes.', 'Just answer the question.'],
+    done: { summary: 'could not reproduce: nothing pushes; listed every network call in SECURITY.md', files: ['SECURITY.md'], checks: 'tests ✔ · typecheck ✔ · build –',
+      body: `<p><b>No.</b> Workers commit on their branch and stop. There is no push, no pull request, no merge, and no code path that could do any of those. You review the branch and ship it however you ship things.</p>
+<p>What it does talk to: your backlog (the <code>gh</code> CLI, or Linear's MCP server through your agent's own sign-in); Hacker News, GitHub search and dev.to for squirrels, read-only; Slack only if you paste a token or webhook; and your agent's model, through your own login, for drafted prompts and the one-line "why you might care". No telemetry, no server of mine. MIT licensed; the source is one <code>git clone</code> away.</p>` } },
+  { key: 'SITE-9', kind: 'SPIKE', title: 'who made this', priority: 4,
+    prompts: ['Keep it to three lines.', 'Investigate first, then do the obvious thing.', 'Credits, then get out.'],
+    done: { summary: 'wrote the colophon; committed AUTHORS', files: ['AUTHORS', 'LICENSE'], checks: 'tests – · typecheck – · build –',
+      body: `<p>Michael Phillips (<a href="https://github.com/heymichaelp">heymichaelp</a>), who has ADD and wanted a tool that works with it instead of around it. Built with a coding agent, in one long afternoon of ADD-driven development, naturally.</p>
+<p>MIT. Source, issues and the research notes at <a href="https://github.com/heymichaelp/adddd">github.com/heymichaelp/adddd</a>.</p>` } },
+];
+
+const FALLBACK_SQUIRRELS = [
+  { id: 'hn', source: 'icse', topic: 'adhd · programmers', title: 'Get Me In The Groove: supporting ADHD professional programmers', url: 'https://people.cs.umass.edu/~mendres/papers/GetMeInTheGroove.pdf',
+    blurb: 'ICSE 2025 · 99 forum threads · 493 developers surveyed', why: 'You are dispatching tickets about ADHD, so the one large study of programmers with ADHD is a fair detour.',
+    gist: ['Mixed-methods: r/ADHD_Programmers threads first, then a survey of 239 ADHD and 254 non-ADHD professionals.', 'ADHD programmers were 1.8 to 4.4 times more likely to struggle with every challenge measured, time management most of all.', 'Coping strategies that worked were external: lists, timers, body doubling, and tools that take over the planning.'] },
+  { id: 'arxiv', source: 'arxiv', topic: 'ai pairing · adhd', title: "Two's a Crowd: human and AI copresence for developers with ADHD", url: 'https://arxiv.org/abs/2609.21254',
+    blurb: '2026 · fourteen engineers interviewed', why: 'This is where the "one cue, not three" rule and the checks line came from.',
+    gist: ['Agents work as judgment-free partners: no small talk, no performance anxiety.', 'Notifications and surprise interruptions drive avoidance; participants snoozed everything.', 'Reviewing large amounts of generated code was the exhausting part: "if it doesn\'t work it\'s all on me".'] },
+  { id: 'repo', source: 'github', topic: 'claude code · plugins', title: 'heymichaelp/adddd', url: 'https://github.com/heymichaelp/adddd',
+    blurb: 'TypeScript · MIT · the thing this site is about', why: 'The source of the plugin you are playing with, including the research notes in the changelog.',
+    gist: ['Commands, a prompt interceptor, background agents and a board, packaged as a plugin for coding agents.', 'Workers live in their own git worktrees and never push.', 'Also ships an Agent Plugins 1.0.0 layout and a portable skill for other agents.'] },
+];
+const NUDGES = [
+  { slug: 'text-mom', title: 'text your mom', why: 'she would like that. the workers will not notice.' },
+  { slug: 'snack', title: 'get a snack, but hurry', why: 'something you do not have to cook. back before the next card.' },
+  { slug: 'water', title: 'refill your water', why: 'the glass is empty. it has been empty for a while.' },
+  { slug: 'stretch', title: 'stand up and stretch for thirty seconds', why: 'shoulders down from your ears. the worktrees can wait.' },
+  { slug: 'window', title: 'look at something far away for twenty seconds', why: 'out a window, past the screen. your eyes have been at arm\'s length all day.' },
+  { slug: 'outside', title: 'step outside and get some light on your face', why: 'one minute. no phone. the build is still building.' },
+  { slug: 'pushups', title: 'do ten push-ups', why: 'or squats. nobody is watching and nothing is blocked on you.' },
+  { slug: 'dish', title: 'put one dish in the dishwasher', why: 'just one. momentum is a lie you can tell yourself.' },
+  { slug: 'hi', title: 'say hi to whoever is in the house', why: 'or the dog. or the plant. out loud.' },
+  { slug: 'pet', title: 'feed the pet or water the plant', why: 'one of them is looking at you.' },
+  { slug: 'floor', title: 'lie on the floor for two minutes', why: 'set a timer. stare at the ceiling. this is allowed.' },
+  { slug: 'writeit', title: 'write down the thing you keep meaning to remember', why: 'the one that popped up twice already today. paper is fine.' },
+  { slug: 'book-it', title: 'book the appointment you have been putting off', why: 'dentist, haircut, oil change. two minutes online, then it is gone from your head.' },
+  { slug: 'meds', title: 'take your meds if you have some', why: 'you know the ones. this card is the reminder.' },
+  { slug: 'reply', title: 'reply to the one text you have been ignoring', why: 'one line is enough. "sorry, swamped, yes" counts.' },
+  { slug: 'breathe', title: 'four slow breaths, in through the nose', why: 'nothing needs you for the next twenty seconds. prove it.' },
+  { slug: 'coffee', title: 'make a proper coffee or tea', why: 'the kettle takes exactly as long as a worker does.', when: 'morning' },
+  { slug: 'breakfast', title: 'eat something that is not coffee', why: 'toast counts. a banana counts.', when: 'morning' },
+  { slug: 'lunch', title: 'eat an actual lunch', why: 'away from the keyboard. the cards will queue up politely.', when: 'day' },
+  { slug: 'dinner', title: 'figure out what dinner is', why: 'deciding now beats deciding at nine.', when: 'evening' },
+  { slug: 'teeth', title: 'go brush your teeth', why: 'it has been a while, has it not.', when: 'late' },
+  { slug: 'stop', title: 'ask yourself if you should stop for today', why: 'the workers keep going without you. that is the whole point.', when: 'late' },
+];
+const TOPICS = ['adhd', 'developer productivity', 'git worktree', 'coding agents', 'typescript', 'terminal tools', 'focus', 'open source maintainers'];
+const SITE_BREAK_MS = 8 * 60000;   // a web visit is short: nudge after eight minutes without a break
+const SNOOZE_MS = 5 * 60000;
+
+function timeOfDay(h) { return h >= 5 && h < 11 ? 'morning' : h >= 11 && h < 17 ? 'day' : h >= 17 && h < 22 ? 'evening' : 'late'; }
+function readList(k) { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
+function writeList(k, v) { try { localStorage.setItem(k, JSON.stringify(v.slice(-300))); } catch (e) { /* fine */ } }
+function pickNudge(blurb) {
+  const slot = timeOfDay(new Date().getHours());
+  const banned = new Set(readList('adddd.never'));
+  const seen = new Set(readList('adddd.seen'));
+  const allowed = NUDGES.filter(n => !banned.has(n.slug));
+  const fits = allowed.filter(n => !n.when || n.when === slot);
+  const fresh = fits.filter(n => !seen.has('life:' + n.slug));
+  const pool = fresh.length ? fresh : fits.length ? fits : allowed;
+  const n = pool[Math.floor(Math.random() * pool.length)];
+  return n ? { kind: 'life', ...n, blurb } : null;
+}
+// live squirrels: one of three public APIs on a random topic, with a timeout and the curated list as a fallback
+async function fetchJson(url, ms) {
+  const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+  try { const r = await fetch(url, { signal: c.signal, headers: { accept: 'application/json' } }); if (!r.ok) throw new Error(r.status); return await r.json(); }
+  finally { clearTimeout(t); }
+}
+async function huntSquirrel() {
+  const seen = new Set(readList('adddd.seen'));
+  const topic = TOPICS[Math.floor(Math.random() * TOPICS.length)];
+  const sources = ['hn', 'devto', 'github'].sort(() => Math.random() - 0.5);
+  for (const source of sources) {
+    try {
+      let cands = [];
+      if (source === 'hn') {
+        const d = await fetchJson(`https://hn.algolia.com/api/v1/search?query=${encodeURIComponent(topic)}&tags=story&hitsPerPage=25`, 5000);
+        cands = (d.hits || []).filter(h => h.url && h.points >= 20).map(h => ({ title: h.title, url: h.url, blurb: `${h.points} points · ${h.num_comments || 0} comments on Hacker News`, gist: [`${h.points} points and ${h.num_comments || 0} comments on Hacker News.`, `posted by ${h.author}${h.created_at ? ' on ' + h.created_at.slice(0, 10) : ''}.`, `thread: https://news.ycombinator.com/item?id=${h.objectID}`], score: h.points }));
+      } else if (source === 'devto') {
+        const d = await fetchJson(`https://dev.to/api/articles?tag=${encodeURIComponent(topic.split(' ')[0])}&top=90&per_page=25`, 5000);
+        cands = (Array.isArray(d) ? d : []).filter(a => a.url).map(a => ({ title: a.title, url: a.url, blurb: `${a.public_reactions_count || 0} reactions · ${a.reading_time_minutes || '?'} min read on dev.to`, gist: [a.description || 'no description given.', `by ${a.user && a.user.name ? a.user.name : 'someone'} · ${a.reading_time_minutes || '?'} minute read.`, `tags: ${(a.tag_list || []).join(', ') || topic}`], score: a.public_reactions_count || 0 }));
+      } else {
+        const d = await fetchJson(`https://api.github.com/search/repositories?q=${encodeURIComponent(topic + ' stars:300..25000')}&sort=updated&per_page=25`, 5000);
+        cands = (d.items || []).map(r => ({ title: r.full_name, url: r.html_url, blurb: `★ ${r.stargazers_count} · ${r.language || 'code'} · GitHub`, gist: [r.description || 'no description given.', `${r.stargazers_count} stars, ${r.open_issues_count} open issues, last pushed ${(r.pushed_at || '').slice(0, 10)}.`, `license: ${r.license && r.license.spdx_id ? r.license.spdx_id : 'none listed'}`], score: r.stargazers_count }));
+      }
+      cands = cands.filter(c => !seen.has(c.url)).sort((a, b) => b.score - a.score).slice(0, 8);
+      if (!cands.length) continue;
+      const c = cands[Math.floor(Math.random() * cands.length)];
+      return { kind: 'link', source, topic, title: c.title, url: c.url, blurb: c.blurb, gist: c.gist, why: `found on ${source === 'hn' ? 'Hacker News' : source === 'devto' ? 'dev.to' : 'GitHub'} while looking for "${topic}". no model picked this one; the real plugin asks one to.` };
+    } catch (e) { /* next source */ }
+  }
+  const left = FALLBACK_SQUIRRELS.filter(s => !seen.has(s.url));
+  const s = left[Math.floor(Math.random() * left.length)] || FALLBACK_SQUIRRELS[0];
+  return { kind: 'link', ...s, why: s.why + ' (the live hunt did not get through, so this one is from the shelf.)' };
+}
+let pantry = null, hunting = false;
+async function restock() {
+  if (pantry || hunting) return;
+  hunting = true;
+  try { pantry = await huntSquirrel(); } catch (e) { pantry = null; } finally { hunting = false; }
+}
+function markSeen(id) { const l = readList('adddd.seen'); if (!l.includes(id)) { l.push(id); writeList('adddd.seen', l); } }
+
+// ---------- state ----------
+const S = {
+  backlog: TICKETS.slice(),
+  workers: [],          // { t, prompt, status, dispatchedAt, updatedAt, reply }
+  picked: null,
+  squirrel: null,       // { kind: 'link' | 'life', ... }
+  squirrelQueue: [],
+  reviewed: [],
+  startedAt: Date.now(),
+  lastBreakAt: Date.now(),
+  snoozedUntil: 0,
+  guardId: null,
+  dispatches: 0,
+  sound: true,
+  plain: false,
+};
+try { S.sound = localStorage.getItem('adddd.sound') !== 'off'; } catch (e) { /* fine */ }
+
+const $ = id => document.getElementById(id);
+const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls) n.className = cls; if (html !== undefined) n.innerHTML = html; return n; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const rand = (a, b) => a + Math.random() * (b - a);
+const PRIO = ['', 'urgent', 'high', 'medium', 'low'];
+const WEIGHT = { 1: 8, 2: 4, 3: 2, 4: 1 };
+const ago = (from, now) => { const s = Math.max(0, Math.round((now - from) / 1000)); if (s < 60) return s + 's'; const m = Math.round(s / 60); return m < 60 ? m + 'm' : Math.round(m / 60) + 'h'; };
+const elapsed = (from, now) => { const m = Math.floor((now - from) / 60000); return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0') + 'm'; };
+
+// ---------- sound: three tiny tones ----------
+let audio = null;
+function beep(kind) {
+  if (!S.sound) return;
+  try {
+    audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+    const notes = kind === 'dispatch' ? [880] : kind === 'done' ? [660, 990] : [523, 523];
+    notes.forEach((f, i) => {
+      const o = audio.createOscillator(); const g = audio.createGain();
+      o.type = 'triangle'; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, audio.currentTime + i * 0.12);
+      g.gain.exponentialRampToValueAtTime(0.08, audio.currentTime + i * 0.12 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + i * 0.12 + 0.11);
+      o.connect(g); g.connect(audio.destination);
+      o.start(audio.currentTime + i * 0.12); o.stop(audio.currentTime + i * 0.12 + 0.12);
+    });
+  } catch (e) { /* no audio, no problem */ }
+}
+
+// ---------- the one card in front of you ----------
+function nowCard() {
+  const human = S.workers.filter(w => w.status === 'needs-human').sort((a, b) => a.updatedAt - b.updatedAt)[0]
+    || S.workers.filter(w => w.status === 'done').sort((a, b) => a.updatedAt - b.updatedAt)[0];
+  if (human) return { kind: 'worker', w: human };
+  if (S.squirrel) return { kind: 'squirrel', s: S.squirrel };
+  if (S.picked) return { kind: 'ticket', t: S.picked };
+  return { kind: 'idle' };
+}
+function pickNext() {
+  if (S.backlog.length === 0) { S.picked = null; return null; }
+  const first = S.backlog.find(t => t.first);
+  let t;
+  if (first) t = first;
+  else {
+    const total = S.backlog.reduce((n, x) => n + (WEIGHT[x.priority] || 1), 0);
+    let r = Math.random() * total;
+    t = S.backlog[S.backlog.length - 1];
+    for (const x of S.backlog) { r -= WEIGHT[x.priority] || 1; if (r <= 0) { t = x; break; } }
+  }
+  S.picked = t;
+  return t;
+}
+function dispatch(t, prompt) {
+  S.backlog = S.backlog.filter(x => x !== t);
+  S.picked = null;
+  S.dispatches += 1;
+  const w = { t, prompt, status: 'running', dispatchedAt: Date.now(), updatedAt: Date.now(), reply: -1 };
+  S.workers.push(w);
+  beep('dispatch');
+  const delay = t.ask ? rand(3500, 6000) : rand(4000, 11000);
+  setTimeout(() => comeBack(w), delay);
+  const next = pickNext();
+  if (S.dispatches === 2 || S.dispatches === 5 || S.dispatches === 8) { if (pantry) { S.squirrelQueue.push(pantry); pantry = null; } restock(); }
+  if (S.dispatches === 3 || S.dispatches === 7) { const n = pickNudge(); if (n) S.squirrelQueue.push(n); }
+  serveSquirrel();
+  const inflight = S.workers.filter(x => x.status === 'running').length;
+  const shiny = S.squirrel ? (S.squirrel.kind === 'life' ? '  ⟶  🚪 nothing is waiting on you' : '  ⟶  🐿️ squirrel') : '';
+  const upNext = next ? `NEXT ▶ ${next.key} · ${esc(next.title)} · type ONE prompt` : 'the backlog is empty 🎉';
+  log(prompt, `🎯 ${t.key} shipped to adddd/${t.key} · ${inflight} in flight · it comes back only when it needs you${shiny}  ⟶  ${upNext}`);
+}
+function comeBack(w) {
+  w.updatedAt = Date.now();
+  if (w.t.ask && w.reply < 0) { w.status = 'needs-human'; beep('resurface'); toast(`🔔 ${w.t.key} needs you: ${w.t.ask.question}`); }
+  else { w.status = 'done'; beep('done'); toast(`✅ ${w.t.key} done (${w.t.done.checks}): ${w.t.done.summary}`); }
+  render();
+}
+function answer(w, i, text) {
+  w.reply = i; w.replyText = text; w.status = 'running'; w.updatedAt = Date.now();
+  log(text, `↩ sent to ${w.t.key} · it resumes in its worktree`);
+  setTimeout(() => comeBack(w), rand(2500, 5000));
+  render();
+}
+function review(w) {
+  w.status = 'dismissed';
+  S.reviewed.push(w);
+  const body = w.t.done.byReply && w.reply >= 0 ? w.t.done.byReply[w.reply] : w.t.done.body;
+  const node = el('article', 'reviewed');
+  node.id = 'r-' + w.t.key;
+  node.innerHTML = `<h3><span class="ok">✔</span> ${w.t.key} · ${w.t.kind}: ${esc(w.t.title)}</h3>
+<div class="meta">you said: "${esc(w.prompt)}"${w.replyText ? ` · you answered: "${esc(w.replyText)}"` : ''} · ${w.t.done.files.join(', ')} · ${w.t.done.checks}</div>${body}`;
+  $('scroll').appendChild(node);
+  if (!S.picked) pickNext();
+  render();
+  node.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+function serveSquirrel() { if (!S.squirrel && S.squirrelQueue.length) S.squirrel = S.squirrelQueue.shift(); }
+function dismissSquirrel(line) {
+  if (!S.squirrel) return;
+  const s = S.squirrel;
+  markSeen(s.kind === 'life' ? 'life:' + s.slug : s.url);
+  if (S.guardId && s.kind === 'life' && s.slug === S.guardId) { S.guardId = null; S.snoozedUntil = Date.now() + SNOOZE_MS; }
+  if (line) toast(line);
+  S.squirrel = null; serveSquirrel(); render();
+}
+/** the break guard: eight minutes on the page without a break, and the next quiet moment is a nudge off-screen */
+function guardBreak() {
+  const now = Date.now();
+  if (S.squirrel || now < S.snoozedUntil || now - S.lastBreakAt < SITE_BREAK_MS) return;
+  const k = nowCard().kind;
+  if (k !== 'idle' && k !== 'ticket') return;
+  const n = pickNudge(`you have been here ${elapsed(S.lastBreakAt, now)} without a break.`);
+  if (!n) return;
+  S.squirrel = n; S.guardId = n.slug; beep('resurface');
+}
+
+// ---------- rendering ----------
+let toastTimer = null;
+function toast(text) {
+  let t = document.querySelector('.toast');
+  if (!t) { t = el('div', 'toast'); document.body.appendChild(t); }
+  t.textContent = text;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 6000);
+}
+function log(cmd, drop) {
+  const e = el('div', 'entry');
+  e.innerHTML = `<div class="cmd">${esc(cmd)}</div><div class="drop">${drop}</div>`;
+  $('scroll').appendChild(e);
+  $('scroll').scrollTop = $('scroll').scrollHeight;
+}
+function key(n, label, full) { return `<button type="button" data-key="${n}" class="${full ? 'full' : ''}"><b>${n}:</b> ${label}</button>`; }
+function statusLine() {
+  const now = Date.now();
+  const running = S.workers.filter(w => w.status === 'running').length;
+  const human = S.workers.filter(w => w.status === 'needs-human').length;
+  const done = S.workers.filter(w => w.status === 'done').length;
+  const open = S.workers.filter(w => w.status !== 'dismissed').length;
+  const bits = [`${running} in flight · ${open}/6 worktrees`];
+  if (human) bits.push(`${human} need${human === 1 ? 's' : ''} you`);
+  if (done) bits.push(`${done} done`);
+  bits.push(`${S.backlog.length} in backlog`);
+  if (now - S.startedAt >= 60000) bits.push(`${elapsed(S.startedAt, now)} at it`);
+  return 'adddd · ' + bits.join(' · ');
+}
+function render() {
+  const card = nowCard();
+  const now = Date.now();
+  const band = $('band');
+  const input = $('input');
+  let html = '<div class="now">NOW</div>';
+  let placeholder = '';
+  if (card.kind === 'idle') {
+    if (S.backlog.length === 0 && S.workers.every(w => w.status === 'dismissed')) {
+      html += `<div class="card"><div class="head">🎉 backlog empty. nothing in front of you.</div><div class="dim">that is the whole idea. everything you reviewed is above; the real thing is one command away.</div>
+<div class="keys">${key(1, 'copy the install command')}${key(2, 'open the GitHub repo')}${key(3, 'read it plain')}</div></div>`;
+      placeholder = 'press a number';
+    } else {
+      const waiting = S.workers.filter(w => w.status === 'running').map(w => w.t.key).join(', ');
+      html += `<div class="card"><div class="dim">nothing in front of you. ${waiting ? `${waiting} ${waiting.includes(',') ? 'are' : 'is'} still working; the card comes back when it is done.` : ''}</div></div>`;
+      placeholder = 'wait for it…';
+    }
+  } else if (card.kind === 'ticket') {
+    const t = card.t;
+    html += `<div class="card"><div class="head"><span class="accent">🎯 ${t.key}</span> ${t.kind}: ${esc(t.title)} <span class="dim">(${PRIO[t.priority]})</span></div>
+<div class="keys" style="flex-direction:column;gap:2px">${t.prompts.map((p, i) => key(i + 1, esc(p), true)).join('')}</div>
+<div class="dim">press a number, or type your own prompt and Enter. it ships to a worktree and you never see it again (until it needs you).</div>
+<div class="keys">${key(0, 'skip this ticket')}</div></div>`;
+    placeholder = t.prompts[0];
+  } else if (card.kind === 'squirrel') {
+    const s = card.s;
+    if (s.kind === 'life') {
+      const busy = S.workers.filter(w => w.status === 'running').length;
+      html += `<div class="card"><div class="head"><span class="accent">🚪 OFF-SCREEN</span> <span class="dim">· ${s.blurb ? esc(s.blurb) : busy ? `${busy} worker${busy === 1 ? ' is' : 's are'} busy. you are not.` : 'nothing is waiting on you.'}</span></div>
+<div class="b">${esc(s.title)}</div><div class="accent">${esc(s.why)}</div>
+<div class="keys">${key(1, 'meh')}${key(2, 'did it')}${key(3, 'slack me')}${key(4, 'never again')}</div></div>`;
+    } else {
+      html += `<div class="card"><div class="head"><span class="info">🐿️ SQUIRREL</span> <span class="dim">· ${s.source} · ${s.topic}</span></div>
+<div class="b">${esc(s.title)}</div><div class="dim">${esc(s.blurb)}</div><div class="info">${esc(s.why)}</div>
+${s.showGist ? s.gist.map(g => `<div>  • ${esc(g)}</div>`).join('') : ''}${s.note ? `<div class="ok">${esc(s.note)}</div>` : ''}
+<div class="dim"><a href="${s.url}">${s.url}</a></div>
+<div class="keys">${key(1, 'meh')}${key(2, 'gist')}${key(3, 'slack me')}${key(4, 'browser')}</div></div>`;
+    }
+    placeholder = 'or type a prompt to skip straight to the next ticket';
+  } else {
+    const w = card.w;
+    const said = w.prompt.length > 120 ? w.prompt.slice(0, 117) + '…' : w.prompt;
+    if (w.status === 'needs-human') {
+      html += `<div class="card"><div class="head"><span class="warn">❓ ${w.t.key}</span> needs you <span class="dim">· ${ago(w.updatedAt, now)} · adddd/${w.t.key}</span></div>
+<div class="dim">you said: "${esc(said)}"</div><div class="dim">so far: ${esc(w.t.ask.soFar)}</div>
+<div class="warn q">"${esc(w.t.ask.question)}"</div>
+<div class="keys" style="flex-direction:column;gap:2px">${w.t.ask.replies.map((r, i) => key(i + 1, esc(r), true)).join('')}</div>
+<div class="dim">press a number, or type your own reply and Enter.</div>
+<div class="keys">${key(0, 'dismiss')}</div></div>`;
+      placeholder = w.t.ask.replies[0];
+    } else {
+      const d = w.t.done;
+      html += `<div class="card"><div class="head"><span class="ok">✅ ${w.t.key}</span> done, review me <span class="dim">· ${ago(w.updatedAt, now)} · adddd/${w.t.key}</span></div>
+<div class="dim">you said: "${esc(said)}"</div><div>${esc(d.summary)}</div>
+<div class="ok">checks: ${esc(d.checks)}</div>
+<div class="dim">start here: ${d.files[0]} · ${d.files.length} file${d.files.length === 1 ? '' : 's'} · 1 commit</div>
+<div class="keys">${key(1, 'reviewed, next')}${key(2, 'open transcript')}</div></div>`;
+      placeholder = 'press 1 to review, or type a follow-up';
+    }
+  }
+  html += `<div class="status">${statusLine()}</div>`;
+  band.innerHTML = html;
+  input.placeholder = placeholder;
+  band.querySelectorAll('button[data-key]').forEach(b => b.addEventListener('click', () => press(b.dataset.key)));
+  renderPane(now);
+}
+function renderPane(now) {
+  const running = S.workers.filter(w => w.status === 'running');
+  const waiting = S.workers.filter(w => w.status === 'needs-human');
+  const done = S.workers.filter(w => w.status === 'done');
+  const glyph = w => w.status === 'running' ? '◐' : w.status === 'needs-human' ? '❓' : '✅';
+  const rows = [...waiting, ...done, ...running];
+  let html = `<h2>In flight <span class="dim">(${running.length} running · ${waiting.length} waiting on you · ${done.length} done)</span></h2><ul>`;
+  html += rows.length ? rows.map(w => `<li class="${w.status === 'running' ? 'dim' : ''}">${glyph(w)} ${w.t.key} ${esc(w.t.title)} <span class="dim">· ${ago(w.updatedAt, now)}</span></li>`).join('') : '<li class="dim">no worktrees yet. dispatch something.</li>';
+  html += '</ul>';
+  html += `<h2>Reviewed <span class="dim">(${S.reviewed.length})</span></h2><ul>`;
+  html += S.reviewed.length ? S.reviewed.map(w => `<li><button type="button" data-goto="r-${w.t.key}">✔ ${w.t.key} ${esc(w.t.title)}</button></li>`).join('') : '<li class="dim">nothing yet. it piles up here.</li>';
+  html += '</ul>';
+  html += `<div class="foot">site · ${S.backlog.length} in backlog · ${S.workers.filter(w => w.status !== 'dismissed').length}/6 worktrees${S.picked ? ` · picked ${S.picked.key}` : ''}</div>`;
+  const pane = $('pane');
+  pane.innerHTML = html;
+  pane.querySelectorAll('button[data-goto]').forEach(b => b.addEventListener('click', () => {
+    const n = $(b.dataset.goto); if (!n) return;
+    n.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    n.classList.add('flash'); setTimeout(() => n.classList.remove('flash'), 1500);
+  }));
+}
+
+// ---------- input: digits press buttons, words dispatch ----------
+function press(k) {
+  const card = nowCard();
+  const n = Number(k);
+  if (card.kind === 'ticket') {
+    if (n === 0) { S.backlog = [...S.backlog.filter(t => t !== card.t), card.t]; S.picked = null; pickNext(); toast(`skipped ${card.t.key}; it goes to the back of the line`); render(); return; }
+    const p = card.t.prompts[n - 1]; if (p) dispatchFromCard(p);
+    return;
+  }
+  if (card.kind === 'worker') {
+    const w = card.w;
+    if (w.status === 'needs-human') {
+      if (n === 0) { w.status = 'dismissed'; toast(`${w.t.key} parked. its worktree stays.`); if (!S.picked) pickNext(); render(); return; }
+      const r = w.t.ask.replies[n - 1]; if (r) answer(w, n - 1, r);
+    } else {
+      if (n === 1) review(w);
+      if (n === 2) toast(`no transcript here; in the real thing, 2 opens the worker's own conversation and your next Enter goes to it.`);
+    }
+    return;
+  }
+  if (card.kind === 'squirrel') {
+    const s = card.s;
+    if (s.kind === 'life') {
+      if (n === 1) dismissSquirrel('🚪 fine. next.');
+      if (n === 2) { S.lastBreakAt = Date.now(); S.snoozedUntil = 0; beep('done'); dismissSquirrel(`✅ ${s.title}. nice.`); }
+      if (n === 3) dismissSquirrel('📨 no Slack on a website. in the real thing this lands in your DMs. moving on.');
+      if (n === 4) { const l = readList('adddd.never'); if (!l.includes(s.slug)) { l.push(s.slug); writeList('adddd.never', l); } dismissSquirrel(`🚪 "${s.title}" will not come back, not even next visit.`); }
+    } else {
+      if (n === 1) dismissSquirrel('🐿️ gone.');
+      if (n === 2) { s.showGist = true; render(); }
+      if (n === 3) {
+        const text = `${s.title}\n${s.url}`;
+        const done = () => { s.note = 'no Slack on a website; copied the link instead'; render(); };
+        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+      }
+      if (n === 4) { window.open(s.url, '_blank', 'noopener'); s.note = 'opened in a new tab'; render(); }
+    }
+    return;
+  }
+  if (card.kind === 'idle' && S.backlog.length === 0) {
+    if (n === 1) {
+      const text = '/plugin install adddd --marketplace heymichaelp/adddd';
+      const done = ok => toast(ok ? 'copied: ' + text : text);
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => done(true), () => done(false)); else done(false);
+    }
+    if (n === 2) window.open('https://github.com/heymichaelp/adddd', '_blank', 'noopener');
+    if (n === 3) showPlain();
+  }
+}
+function dispatchFromCard(prompt) {
+  const card = nowCard();
+  if (card.kind !== 'ticket') return;
+  dispatch(card.t, prompt);
+  render();
+}
+function submit(text) {
+  let card = nowCard();
+  if (card.kind === 'squirrel') { S.squirrel = null; serveSquirrel(); card = nowCard(); if (card.kind === 'squirrel') { S.squirrel = null; card = nowCard(); } }
+  if (card.kind === 'worker') {
+    const w = card.w;
+    if (w.status === 'needs-human') answer(w, 2, text);
+    else { log(text, `↩ sent to ${w.t.key} · in the real thing the worker resumes with your follow-up; here it just says thanks`); toast(`${w.t.key}: thanks. still done.`); }
+    return;
+  }
+  if (card.kind === 'ticket') { dispatch(card.t, text); render(); return; }
+  log(text, 'nothing in front of you, so this went nowhere. (in the real thing it would go to your main conversation.)');
+}
+$('composer').addEventListener('submit', e => {
+  e.preventDefault();
+  const input = $('input');
+  const text = input.value.trim();
+  if (!text) { const card = nowCard(); if (card.kind === 'ticket') dispatchFromCard(card.t.prompts[0]); else if (card.kind === 'worker' && card.w.status === 'needs-human') answer(card.w, 0, card.w.t.ask.replies[0]); else if (card.kind === 'worker') review(card.w); return; }
+  input.value = '';
+  submit(text);
+});
+$('input').addEventListener('keydown', e => {
+  if (/^[0-9]$/.test(e.key) && e.target.value === '') { e.preventDefault(); press(e.key); }
+});
+document.addEventListener('keydown', e => {
+  if (e.target === $('input') || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key.length === 1 && !S.plain) { $('input').focus(); }
+});
+
+// ---------- plain mode: the whole backlog as an article ----------
+function showPlain() {
+  S.plain = true;
+  const read = $('read');
+  read.hidden = false;
+  $('term').hidden = true;
+  read.innerHTML = `<h1>adddd <span class="dim">· the backlog, read plain</span></h1><p class="dim">Every ticket below is a card in the simulation. <button type="button" id="playBtn" class="info">play it instead</button>.</p>` +
+    TICKETS.map(t => `<article class="reviewed"><h3>${t.key} · ${t.kind}: ${esc(t.title)}</h3>${t.done.byReply ? t.done.byReply[2] : t.done.body}</article>`).join('');
+  $('playBtn').addEventListener('click', () => { S.plain = false; read.hidden = true; $('term').hidden = false; history.replaceState(null, '', location.pathname); $('input').focus(); });
+  window.scrollTo(0, 0);
+}
+$('readBtn').addEventListener('click', showPlain);
+$('readLink').addEventListener('click', e => { e.preventDefault(); showPlain(); });
+if (location.hash === '#read') showPlain();
+
+// ---------- sound toggle, clock ----------
+const soundBtn = $('soundBtn');
+function paintSound() { soundBtn.textContent = `sound: ${S.sound ? 'on' : 'off'}`; soundBtn.setAttribute('aria-pressed', String(S.sound)); }
+soundBtn.addEventListener('click', () => { S.sound = !S.sound; try { localStorage.setItem('adddd.sound', S.sound ? 'on' : 'off'); } catch (e) { /* fine */ } paintSound(); });
+paintSound();
+setInterval(() => { if (!S.plain) { guardBreak(); render(); } }, 20000);
+
+// ---------- go ----------
+pickNext();
+render();
+restock();
+if (!S.plain) $('input').focus();
+})();
+</script>
+</body>
+</html>
