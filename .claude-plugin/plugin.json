@@ -60,6 +60,32 @@
       "description": "Play chaos sounds (macOS only)",
       "default": true,
       "title": "Chaos sounds"
+    },
+    "slackWebhookUrl": {
+      "type": "string",
+      "title": "Slack webhook (DM yourself)",
+      "description": "Incoming webhook URL pointed at your own DM; squirrels get sent there",
+      "default": "",
+      "sensitive": true
+    },
+    "squirrels": {
+      "type": "boolean",
+      "title": "Squirrels between tickets",
+      "description": "Surface an interesting article, post or library between tickets",
+      "default": true
+    },
+    "topics": {
+      "type": "string",
+      "title": "Squirrel topics",
+      "description": "Comma-separated topics to hunt for (blank = inferred from the repo)",
+      "default": ""
+    },
+    "slackToken": {
+      "type": "string",
+      "title": "Slack user token",
+      "description": "xoxp- user token: unread DMs and @mentions become cards; 'slack me' DMs you directly",
+      "default": "",
+      "sensitive": true
     }
   },
   "author": {

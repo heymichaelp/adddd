@@ -1,4 +1,4 @@
-import type { AddddBoard, AddddTicket, AddddWorker } from '../types'
+import type { AddddBoard, AddddSlackMsg, AddddSquirrel, AddddTicket, AddddWorker } from '../types'
 
 export const ACTIVE = new Set(['running', 'needs-human', 'done'])
 
@@ -23,12 +23,16 @@ export function doneUnreviewed(workers: readonly AddddWorker[]): AddddWorker[] {
 export type NowCard =
   | { kind: 'idle' }
   | { kind: 'worker'; worker: AddddWorker }
+  | { kind: 'slack'; msg: AddddSlackMsg }
+  | { kind: 'squirrel'; squirrel: AddddSquirrel }
   | { kind: 'ticket'; ticket: AddddTicket }
 
-/** The one thing the operator should look at: a worker that needs them beats a fresh ticket. */
-export function nowCard(board: Pick<AddddBoard, 'workers' | 'picked'>): NowCard {
+/** The one thing the operator should look at: a worker that needs them, then a Slack message, then a squirrel, then a fresh ticket. */
+export function nowCard(board: Pick<AddddBoard, 'workers' | 'picked'> & Partial<Pick<AddddBoard, 'squirrel' | 'slackMsg'>>): NowCard {
   const human = needsHuman(board.workers)[0] ?? doneUnreviewed(board.workers)[0]
   if (human) return { kind: 'worker', worker: human }
+  if (board.slackMsg) return { kind: 'slack', msg: board.slackMsg }
+  if (board.squirrel) return { kind: 'squirrel', squirrel: board.squirrel }
   if (board.picked) return { kind: 'ticket', ticket: board.picked }
   return { kind: 'idle' }
 }

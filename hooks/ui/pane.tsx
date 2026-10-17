@@ -6,6 +6,11 @@ import { ago, doneUnreviewed, inFlight, needsHuman, nowCard, overlapsOf } from '
 export type Ui = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'>
 
 export type Actions = {
+  say: () => void
+  meh: () => void
+  look: () => void
+  slack: () => void
+  openLink: () => void
   jumpIn: (worker: AddddWorker) => void
   back: () => void
   dismiss: (worker: AddddWorker) => void
@@ -67,6 +72,83 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
             {board.paused ? 'resume + pick a ticket' : 'pick a ticket'}
           </Button>
         </Box>
+      </Box>
+    )
+  }
+  if (card.kind === 'slack') {
+    const m = card.msg
+    return (
+      <Box flexDirection="column">
+        <Text>
+          <Text color="blue" weight="bold">
+            💬 SLACK
+          </Text>
+          <Text dimColor>
+            {' '}
+            · {m.channelName} · {ago(Number(m.ts) * 1000, board.now)} ago
+          </Text>
+        </Text>
+        <Text>
+          <Text weight="bold">{m.userName}:</Text> {m.text}
+        </Text>
+        {m.note ? <Text color="green">{m.note}</Text> : null}
+        <Box gap={1}>
+          <Button key="meh" hotkey="1" plain onPress={a.meh}>
+            meh (mark read)
+          </Button>
+          <Button key="say" hotkey="2" plain onPress={a.say}>
+            say…
+          </Button>
+          <Button key="open" hotkey="3" plain onPress={a.openLink}>
+            open
+          </Button>
+        </Box>
+        <Text dimColor>
+          /adddd meh · say &lt;reply&gt; · open{board.slackInbox > 0 ? ` · ${board.slackInbox} more waiting` : ''}
+          {board.picked ? ` — or type your prompt for ${board.picked.key} to skip past it` : ''}
+        </Text>
+      </Box>
+    )
+  }
+  if (card.kind === 'squirrel') {
+    const s = card.squirrel
+    return (
+      <Box flexDirection="column">
+        <Text>
+          <Text color="cyan" weight="bold">
+            🐿️ SQUIRREL
+          </Text>
+          <Text dimColor>
+            {' '}
+            · {s.source} · {s.topic}
+          </Text>
+        </Text>
+        <Text weight="bold">{s.title}</Text>
+        <Text dimColor>{s.blurb}</Text>
+        <Text color="cyan">{s.why}</Text>
+        {(s.gist ?? []).map((b, i) => (
+          <Text key={`gist-${i}`}>  • {b}</Text>
+        ))}
+        {s.note ? <Text color="green">{s.note}</Text> : null}
+        <Text dimColor>{s.url}</Text>
+        <Box gap={1}>
+          <Button key="meh" hotkey="1" plain onPress={a.meh}>
+            meh
+          </Button>
+          <Button key="look" hotkey="2" plain onPress={a.look}>
+            look
+          </Button>
+          <Button key="slack" hotkey="3" plain onPress={a.slack}>
+            slack me
+          </Button>
+          <Button key="open" hotkey="4" plain onPress={a.openLink}>
+            open
+          </Button>
+        </Box>
+        <Text dimColor>
+          /adddd meh · look · slack · open
+          {board.picked ? ` — or type your prompt for ${board.picked.key} ${board.picked.title} to skip past it` : ''}
+        </Text>
       </Box>
     )
   }

@@ -1,12 +1,14 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 
-import type { AddddBoard, AddddSource, AddddTicket, AddddWorker, PickMode } from '../types'
+import type { AddddBoard, AddddSlackMsg, AddddSource, AddddSquirrel, AddddTicket, AddddWorker, PickMode } from '../types'
 import { parseStatus } from './parse'
 import { pick } from './pick'
 import { ago, inFlight, isActive, nowCard, safeKey, statusLine } from './registry'
 import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, labelGithubIssue, listGithubIssues } from './sources/github'
 import { listLinearIssues, setLinearState } from './sources/linear'
+import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
+import { gistOf, huntSquirrel, openInBrowser, sendSlack, topicsOf } from './squirrel'
 import { drawBand } from './ui/band'
 import { drawPane, type Actions } from './ui/pane'
 import { buildWorkerPrompt, starterPrompt, WORKER_SYSTEM_PROMPT } from './worker-prompt'
@@ -16,7 +18,7 @@ const PANE = 'adddd'
 const AGENT = 'adddd:worker'
 const RECONCILE_MS = 20000
 
-const EMPTY: AddddBoard = { workers: [], picked: null, paused: false, backlogCount: 0, source: 'linear', note: null, now: 0 }
+const EMPTY: AddddBoard = { workers: [], picked: null, squirrel: null, slackMsg: null, slackInbox: 0, paused: false, backlogCount: 0, source: 'linear', note: null, now: 0 }
 const board = atom({ plugin: 'adddd', key: 'board' } as const, EMPTY)
 
 type Options = {
@@ -28,6 +30,10 @@ type Options = {
   maxInFlight: number
   moveToReview: boolean
   sounds: boolean
+  squirrels: boolean
+  topics: string
+  slackWebhookUrl: string
+  slackToken: string
 }
 
 function readOptions(options: PluginOptions): Options {
@@ -45,6 +51,10 @@ function readOptions(options: PluginOptions): Options {
     maxInFlight: Math.max(0, Math.floor(num('maxInFlight', 0))),
     moveToReview: bool('moveToReview', true),
     sounds: bool('sounds', true),
+    squirrels: bool('squirrels', true),
+    topics: str('topics', ''),
+    slackWebhookUrl: str('slackWebhookUrl', ''),
+    slackToken: str('slackToken', ''),
   }
 }
 
@@ -58,7 +68,10 @@ const USAGE = [
   '/adddd status     what every worktree is doing',
   '/adddd source linear|github',
   '/adddd ok [KEY|all]  dismiss the card in front of you (or one, or every done one)',
-  '/adddd open [KEY]    put that worker\'s transcript in the main view · /adddd back',
+  '/adddd meh|look|slack|open   the squirrel in front of you: dismiss, gist, DM yourself, browser',
+  '/adddd say <reply> · meh · open   the Slack message in front of you · /adddd inbox checks now',
+  '/adddd squirrel      fetch one now',
+  '/adddd view [KEY]    put that worker\'s transcript in the main view · /adddd back',
   '/adddd reply KEY …   answer a worker without switching views',
   '/adddd review KEY · retry KEY · dismiss KEY · cleanup',
 ].join('\n')
@@ -76,6 +89,20 @@ let root = ''
 let storeKey = 'adddd:'
 let loaded = false
 let syncWarned = false
+let squirrel: AddddSquirrel | null = null
+let pantry: AddddSquirrel | null = null
+let hunting = false
+let seen: string[] = []
+const SEEN_KEY = 'adddd:squirrels:seen'
+let slackMsg: AddddSlackMsg | null = null
+let slackInbox: AddddSlackMsg[] = []
+let slackSeen: SlackSeen = {}
+let slackSelf = ''
+let slackPolling = false
+let slackWarned = false
+const slackNames = new Map<string, string>()
+const SLACK_SEEN_KEY = 'adddd:slack:seen'
+const SLACK_POLL_MS = 120000
 
 /** A dropped prompt stays in the composer; wipe it once the drop has landed. */
 function clearComposer($: EngineInterface): void {
@@ -88,7 +115,7 @@ const sound = ($: EngineInterface, name: 'dispatch' | 'resurface' | 'done') => {
 
 async function publish($: EngineInterface): Promise<AddddBoard> {
   const now = await $.clock.now()
-  const snap: AddddBoard = { workers: [...workers], picked, paused, backlogCount: backlog.length, source, note, now }
+  const snap: AddddBoard = { workers: [...workers], picked, squirrel, slackMsg, slackInbox: slackInbox.length, paused, backlogCount: backlog.length, source, note, now }
   await update($, board, () => snap)
   const busy = workers.some(isActive) || picked !== null
   $.ui.status(busy ? statusLine(snap) : undefined)
@@ -190,6 +217,196 @@ async function reply($: EngineInterface, w: AddddWorker, text: string): Promise<
   return undefined
 }
 
+// ---------- squirrels ----------
+
+function ticketContext(): string[] {
+  return [...workers.map(w => w.ticket.title), ...(picked ? [picked.title] : [])].slice(-6)
+}
+
+/** Keeps one squirrel ready in the pantry so the card appears the instant a ticket ships. */
+async function restock($: EngineInterface): Promise<void> {
+  if (!opt.squirrels || pantry || hunting) return
+  hunting = true
+  try {
+    const topics = await topicsOf($, root, opt.topics)
+    const found = await huntSquirrel($, topics, new Set(seen), ticketContext())
+    if (found) pantry = found
+  } catch {
+    // the internet was not interesting today
+  } finally {
+    hunting = false
+  }
+}
+
+async function markSeen($: EngineInterface, url: string): Promise<void> {
+  seen = [...seen.filter(u => u !== url), url].slice(-500)
+  await $.store.set(SEEN_KEY, seen).catch(() => undefined)
+}
+
+/** Puts the pantry squirrel in front of the operator, if there is one. */
+function serveSquirrel($: EngineInterface): boolean {
+  if (!opt.squirrels || squirrel || !pantry) return false
+  squirrel = pantry
+  pantry = null
+  void restock($)
+  return true
+}
+
+/** Puts the oldest unread Slack message in front of the operator, if there is one. */
+function serveSlack(): boolean {
+  if (slackMsg || slackInbox.length === 0) return false
+  slackMsg = slackInbox.shift() ?? null
+  return slackMsg !== null
+}
+
+/** Between tickets: a Slack message if one waits, else a squirrel. */
+function serveNext($: EngineInterface): 'slack' | 'squirrel' | undefined {
+  if (serveSlack()) return 'slack'
+  if (serveSquirrel($)) return 'squirrel'
+  return undefined
+}
+
+// ---------- slack ----------
+
+async function slackName($: EngineInterface, user: string): Promise<string> {
+  const known = slackNames.get(user)
+  if (known) return known
+  const name = await userName($, opt.slackToken, user)
+  slackNames.set(user, name)
+  return name
+}
+
+async function checkSlack($: EngineInterface): Promise<number> {
+  if (!opt.slackToken || slackPolling) return 0
+  slackPolling = true
+  try {
+    if (!slackSelf) slackSelf = await whoAmI($, opt.slackToken)
+    const found = await pollSlack($, opt.slackToken, slackSelf, slackSeen, u => slackName($, u))
+    slackSeen = found.seen
+    await $.store.set(SLACK_SEEN_KEY, slackSeen).catch(() => undefined)
+    const fresh = found.messages.filter(
+      m => !slackInbox.some(q => q.channel === m.channel && q.ts === m.ts) && !(slackMsg && slackMsg.channel === m.channel && slackMsg.ts === m.ts),
+    )
+    for (const m of fresh) {
+      const names: Record<string, string> = {}
+      for (const [id, name] of slackNames) names[id] = name
+      m.text = plainText(m.text, names).slice(0, 400)
+      slackInbox.push(m)
+    }
+    if (fresh.length > 0) {
+      $.ui.toast(`💬 ${fresh.length} unread Slack message${fresh.length === 1 ? '' : 's'} queued for between tickets`)
+      await publish($)
+    }
+    return fresh.length
+  } catch (err) {
+    if (!slackWarned) {
+      slackWarned = true
+      $.ui.toast(`adddd · Slack: ${((err as Error)?.message ?? String(err)).slice(0, 140)}`, { timeoutMs: 8000 })
+    }
+    return 0
+  } finally {
+    slackPolling = false
+  }
+}
+
+/** Marks the card's message read and moves on; the next one in the inbox follows at once. */
+async function dismissSlack($: EngineInterface): Promise<void> {
+  if (!slackMsg) return
+  const m = slackMsg
+  slackMsg = null
+  if (opt.slackToken) void markRead($, opt.slackToken, m)
+  serveSlack()
+}
+
+async function saySlack($: EngineInterface, text: string): Promise<string> {
+  if (!slackMsg) return 'no Slack message in front of you.'
+  if (!opt.slackToken) return 'no Slack token set (/config → adddd).'
+  const m = slackMsg
+  const err = await sayBack($, opt.slackToken, m, text)
+  if (err) {
+    m.note = `could not send: ${err}`
+    await publish($)
+    return m.note
+  }
+  await dismissSlack($)
+  await publish($)
+  return `💬 told ${m.userName}: ${text}`
+}
+
+async function openSlack($: EngineInterface): Promise<string> {
+  if (!slackMsg) return 'no Slack message in front of you.'
+  const m = slackMsg
+  const link = opt.slackToken ? await permalinkOf($, opt.slackToken, m) : m.permalink
+  if (!link) return 'no permalink for that message.'
+  const err = await openInBrowser($, link)
+  m.note = err ? `${err} · ${link}` : 'opened in your browser'
+  await publish($)
+  return err ? `${err}; the link is ${link}` : `opened ${link}`
+}
+
+async function dismissSquirrel($: EngineInterface): Promise<void> {
+  if (!squirrel) return
+  await markSeen($, squirrel.url)
+  squirrel = null
+  void restock($)
+}
+
+async function lookAtSquirrel($: EngineInterface): Promise<string> {
+  if (!squirrel) return 'no squirrel in front of you.'
+  const s = squirrel
+  try {
+    s.gist = await gistOf($, s)
+    await publish($)
+    return `${s.title}\n${s.gist.map(b => `• ${b}`).join('\n')}`
+  } catch (err) {
+    s.note = `could not read it: ${(err as Error)?.message ?? String(err)}`
+    await publish($)
+    return s.note
+  }
+}
+
+async function slackSquirrel($: EngineInterface): Promise<string> {
+  if (!squirrel) return 'no squirrel in front of you.'
+  const s = squirrel
+  if (opt.slackToken) {
+    if (!slackSelf) slackSelf = await whoAmI($, opt.slackToken).catch(() => '')
+    const lines = [`🐿️ *${s.title}*`, s.url, s.why, ...(s.gist ?? []).map(b => `• ${b}`)]
+    const err = slackSelf ? await dmSelf($, opt.slackToken, slackSelf, lines.join('\n')) : 'could not read your Slack user id'
+    if (err) {
+      s.note = `Slack: ${err}`
+      await publish($)
+      return s.note
+    }
+    await dismissSquirrel($)
+    await publish($)
+    return `📨 sent ${s.title} to your Slack DMs. moving on.`
+  }
+  if (!opt.slackWebhookUrl) {
+    const copied = await $.ui.copy({ text: `${s.title}\n${s.url}` }).catch(() => ({ isCopied: false as const }))
+    s.note = copied.isCopied ? 'no Slack webhook set (/config → adddd); copied the link instead' : 'no Slack webhook set (/config → adddd)'
+    await publish($)
+    return s.note
+  }
+  const err = await sendSlack($, opt.slackWebhookUrl, s).catch(e => (e as Error)?.message ?? String(e))
+  if (err) {
+    s.note = `Slack: ${err}`
+    await publish($)
+    return s.note
+  }
+  await dismissSquirrel($)
+  await publish($)
+  return `📨 sent ${s.title} to your Slack. moving on.`
+}
+
+async function openSquirrel($: EngineInterface): Promise<string> {
+  if (!squirrel) return 'no squirrel in front of you.'
+  const s = squirrel
+  const err = await openInBrowser($, s.url)
+  s.note = err ? `${err} · ${s.url}` : 'opened in your browser'
+  await publish($)
+  return err ? `${err}; the link is ${s.url}` : `opened ${s.url}`
+}
+
 /** The command and the agent type are the session's: a /clear starts a new one, so they are declared again. */
 async function declare($: EngineInterface): Promise<void> {
   await $.agent.register({
@@ -201,7 +418,7 @@ async function declare($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'adddd',
     description: 'ADD-driven development: one ticket, one prompt, one worktree at a time',
-    argumentHint: '[next|ok|open|reply|pane|pause|resume|status|source|review|retry|cleanup]',
+    argumentHint: '[next|ok|meh|look|slack|open|view|reply|pane|pause|status|source|review|retry|cleanup]',
   })
 }
 
@@ -276,6 +493,17 @@ function pickedText(t: AddddTicket | null): string {
 }
 
 const actions = ($: EngineInterface): Actions => ({
+  say: () => void $.prompt.fill({ text: '/adddd say ', mode: 'replace' }),
+  meh: () => {
+    void (async () => {
+      if (slackMsg) await dismissSlack($)
+      else await dismissSquirrel($)
+      await publish($)
+    })()
+  },
+  look: () => void lookAtSquirrel($),
+  slack: () => void slackSquirrel($),
+  openLink: () => void (slackMsg ? openSlack($) : openSquirrel($)),
   jumpIn: w => {
     if (!w.agentId) return
     viewing = w.agentId
@@ -347,15 +575,32 @@ export const register: Register = (on, options) => {
       alive = []
     }
     for (const w of workers) {
-      const waits = w.status === 'running' || w.status === 'needs-human'
-      if (waits && !(w.agentId && alive.includes(w.agentId))) {
+      if (w.agentId && alive.includes(w.agentId)) continue
+      w.agentId = undefined
+      if (w.status === 'running' || w.status === 'needs-human') {
         w.status = 'failed'
         w.question = 'this worker belonged to a previous session; type a prompt to run it again in the same worktree, or /adddd review it'
-        w.agentId = undefined
       }
+    }
+    try {
+      const savedSeen = await $.store.get(SEEN_KEY)
+      if (Array.isArray(savedSeen)) seen = savedSeen.filter((u): u is string => typeof u === 'string')
+    } catch {
+      seen = []
+    }
+    try {
+      const savedSlack = await $.store.get(SLACK_SEEN_KEY)
+      if (savedSlack && typeof savedSlack === 'object' && !Array.isArray(savedSlack)) slackSeen = savedSlack as SlackSeen
+    } catch {
+      slackSeen = {}
     }
     loaded = true
     await declare($)
+    void restock($)
+    if (opt.slackToken) {
+      void checkSlack($)
+      $.clock.every(SLACK_POLL_MS, () => void checkSlack($))
+    }
     $.clock.every(RECONCILE_MS, () => void reconcile($).catch(() => undefined))
     if (workers.some(isActive) || picked) void $.ui.open({ id: PANE, title: 'adddd' })
     await publish($)
@@ -399,9 +644,49 @@ export const register: Register = (on, options) => {
       }
       case 'status':
         return { text: statusText(now) }
+      case 'meh':
+      case 'skipsquirrel': {
+        if (slackMsg) {
+          const gone = `${slackMsg.userName} in ${slackMsg.channelName}`
+          await dismissSlack($)
+          await publish($)
+          return { text: `💬 ${gone} → marked read.${slackMsg ? ` next: ${slackMsg.userName}` : ''}` }
+        }
+        if (!squirrel) return { text: 'nothing in front of you to dismiss.' }
+        const gone = squirrel.title
+        await dismissSquirrel($)
+        await publish($)
+        return { text: `🐿️ ${gone} → gone.` }
+      }
+      case 'say': {
+        if (!arg) return { text: '/adddd say <your reply>' }
+        const said = await saySlack($, arg)
+        return { text: said }
+      }
+      case 'inbox':
+      case 'slackcheck': {
+        if (!opt.slackToken) return { text: 'no Slack token set (/config → adddd → Slack user token).' }
+        const n = await checkSlack($)
+        if (!slackMsg && serveSlack()) await publish($)
+        return { text: `💬 ${n} new · ${slackInbox.length + (slackMsg ? 1 : 0)} waiting${slackMsg ? ` · in front: ${slackMsg.userName}: ${slackMsg.text.slice(0, 80)}` : ''}` }
+      }
+      case 'look':
+        return { text: await lookAtSquirrel($) }
+      case 'slack':
+        return { text: await slackSquirrel($) }
       case 'open':
+        return { text: slackMsg ? await openSlack($) : await openSquirrel($) }
+      case 'squirrel': {
+        if (!opt.squirrels) return { text: 'squirrels are off (/config → adddd).' }
+        if (!squirrel) {
+          if (!pantry) await restock($)
+          serveSquirrel($)
+        }
+        await publish($)
+        return { text: squirrel ? `🐿️ ${squirrel.title}\n${squirrel.url}\n${squirrel.why}` : 'no squirrel found right now (network? topics?). try again in a bit.' }
+      }
       case 'view': {
-        const w = arg ? findWorker(arg) : (() => { const c = nowCard({ workers, picked }); return c.kind === 'worker' ? c.worker : undefined })()
+        const w = arg ? findWorker(arg) : (() => { const c = nowCard({ workers, picked, squirrel, slackMsg }); return c.kind === 'worker' ? c.worker : undefined })()
         if (!w) return { text: arg ? `no worker ${arg}` : 'nothing to open: no worker is waiting on you.' }
         if (!w.agentId) return { text: `${w.key} has no live worker in this session.` }
         viewing = w.agentId
@@ -424,7 +709,7 @@ export const register: Register = (on, options) => {
             ? workers.filter(w => w.status === 'done')
             : arg
               ? [findWorker(arg)].filter((w): w is AddddWorker => w !== undefined)
-              : (() => { const c = nowCard({ workers, picked }); return c.kind === 'worker' ? [c.worker] : [] })()
+              : (() => { const c = nowCard({ workers, picked, squirrel, slackMsg }); return c.kind === 'worker' ? [c.worker] : [] })()
         if (targets.length === 0) return { text: arg && arg !== 'all' ? `no worker ${arg}` : 'nothing to dismiss.' }
         for (const w of targets) w.status = 'dismissed'
         await publish($)
@@ -501,16 +786,26 @@ export const register: Register = (on, options) => {
     if (!loaded || viewing || e.command || e.isMeta || e.origin.kind !== 'composer') return next(e)
     const text = e.text.trim()
     if (!text || text.startsWith('/')) return next(e)
-    const card = nowCard({ workers, picked })
+    let card = nowCard({ workers, picked, squirrel, slackMsg })
+    if (card.kind === 'slack') {
+      // never a reply: a ticket prompt must not leak into Slack. The message is skipped, not marked read.
+      slackInbox.unshift(card.msg)
+      slackMsg = null
+      card = nowCard({ workers, picked, squirrel, slackMsg })
+    }
+    if (card.kind === 'squirrel') {
+      await dismissSquirrel($)
+      card = nowCard({ workers, picked, squirrel, slackMsg })
+    }
     if (card.kind === 'worker') {
       const w = card.worker
-      if (w.status === 'failed') {
+      if (w.status === 'failed' || !w.agentId) {
         try {
           await dispatch($, w.ticket, text)
           sound($, 'dispatch')
           await publish($)
           clearComposer($)
-          return { drop: `🔁 ${w.key} re-dispatched to ${w.branch} with your new prompt` }
+          return { drop: `🔁 ${w.key} re-dispatched to ${w.branch} with your new prompt (its earlier commits are still on the branch)` }
         } catch (err) {
           return { drop: `adddd · retry failed: ${(err as Error)?.message ?? String(err)}` }
         }
@@ -529,12 +824,19 @@ export const register: Register = (on, options) => {
       sound($, 'dispatch')
       void markTicket($, ticket, 'start')
       const nextTicket = await pickNext($)
+      const served = serveNext($)
       await publish($)
       void $.ui.open({ id: PANE, title: 'adddd' })
       clearComposer($)
       const shipped = `🎯 ${ticket.key} shipped to ${worker.branch} · ${inFlight(workers).length} in flight · it comes back only when it needs you`
       const upNext = nextTicket ? `NEXT ▶ ${nextTicket.key} · ${nextTicket.title} · type ONE prompt` : 'backlog empty 🎉 · /adddd to check again'
-      return { drop: `${shipped}  ⟶  ${upNext}` }
+      const shiny =
+        served === 'slack' && slackMsg
+          ? `  ⟶  💬 first, Slack: ${slackMsg.userName} in ${slackMsg.channelName}`
+          : served === 'squirrel' && squirrel
+            ? `  ⟶  🐿️ first, a squirrel: ${squirrel.title}`
+            : ''
+      return { drop: `${shipped}${shiny}  ⟶  ${upNext}` }
     } catch (err) {
       picked = ticket
       note = `dispatch failed: ${(err as Error)?.message ?? String(err)}`.slice(0, 200)

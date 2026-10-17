@@ -6,6 +6,8 @@ import { pick, weightOf } from './pick'
 import { nowCard, overlapsOf, safeKey, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
 import { parseIssueList, toTicket as linearTicket } from './sources/linear'
+import { parseBullets, parseCuration, parseDevto, parseGithub, parseHn, stripHtml, topicsFromFiles, topicsFromPackageJson } from './squirrel'
+import { parseConversations, parseHistory, parseMentions, plainText, tsNewer } from './slack'
 import { buildWorkerPrompt } from './worker-prompt'
 
 const ticket = (key: string, priority = 0): AddddTicket => ({ key, id: key, title: `do ${key}`, url: '', source: 'linear', priority, createdAt: 0 })
@@ -83,6 +85,71 @@ describe('registry', () => {
   test('safeKey strips what git dislikes', () => {
     expect(safeKey('ENG-12')).toBe('ENG-12')
     expect(safeKey('#12 weird/key')).toBe('12-weird-key')
+  })
+})
+
+describe('squirrels', () => {
+  test('topics come from dependencies and file extensions', () => {
+    expect(topicsFromPackageJson(JSON.stringify({ dependencies: { next: '1', '@supabase/supabase-js': '2' }, devDependencies: { vitest: '3' } }))).toEqual(['nextjs', 'supabase', 'testing'])
+    expect(topicsFromPackageJson('nope')).toEqual([])
+    expect(topicsFromFiles(['a.ts', 'b.tsx', 'c.py', 'README.md'])).toEqual(['typescript', 'python'])
+  })
+  test('feeds parse into candidates', () => {
+    expect(parseHn({ hits: [{ title: 'T', url: 'https://x', points: 99, num_comments: 3, objectID: '1' }, { title: '', url: 'https://y' }] })).toHaveLength(1)
+    expect(parseHn({ hits: [{ title: 'Ask HN', objectID: '42', points: 10 }] })[0]?.url).toBe('https://news.ycombinator.com/item?id=42')
+    expect(parseGithub({ items: [{ full_name: 'a/b', html_url: 'https://g', description: 'd', stargazers_count: 5 }] })[0]?.score).toBe(5)
+    expect(parseDevto([{ title: 'x', url: 'https://d', description: 'e', positive_reactions_count: 7 }])).toHaveLength(1)
+    expect(parseDevto({})).toEqual([])
+  })
+  test('curation JSON is read defensively', () => {
+    expect(parseCuration('sure: {"pick": 2, "why": "because"}', 3)).toEqual({ pick: 2, why: 'because' })
+    expect(parseCuration('{"pick": 9, "why": "no"}', 3)).toBeUndefined()
+    expect(parseCuration('nothing', 3)).toBeUndefined()
+  })
+  test('html strips and bullets parse', () => {
+    expect(stripHtml('<h1>Hi</h1><script>x()</script> there &amp; you')).toBe('Hi there & you')
+    expect(parseBullets('- one\n* two\n3. three\n- four')).toEqual(['one', 'two', 'three'])
+  })
+  test('a squirrel sits between a worker and a ticket', () => {
+    const squirrel = { id: 's', title: 'S', url: 'https://s', blurb: '', source: 'hn' as const, topic: 't', why: 'w', foundAt: 0 }
+    expect(nowCard({ workers: [worker('B', 'needs-human')], picked: ticket('C'), squirrel }).kind).toBe('worker')
+    expect(nowCard({ workers: [worker('A', 'running')], picked: ticket('C'), squirrel }).kind).toBe('squirrel')
+    expect(nowCard({ workers: [], picked: ticket('C'), squirrel: null }).kind).toBe('ticket')
+  })
+})
+
+describe('slack', () => {
+  test('history keeps only new messages from others', () => {
+    const data = { messages: [
+      { type: 'message', user: 'U1', text: 'old', ts: '10.000' },
+      { type: 'message', user: 'U1', text: 'new', ts: '20.000' },
+      { type: 'message', user: 'ME', text: 'mine', ts: '21.000' },
+      { type: 'message', subtype: 'channel_join', user: 'U2', text: 'joined', ts: '22.000' },
+      { type: 'message', bot_id: 'B1', text: 'bot', ts: '23.000' },
+    ] }
+    expect(parseHistory(data, '15.000', 'ME').map(m => m.text)).toEqual(['new'])
+    expect(tsNewer('20.5', '20.4')).toBe(true)
+  })
+  test('mentions parse with channel and permalink', () => {
+    const data = { messages: { matches: [
+      { user: 'U1', username: 'jane', text: 'hey <@ME>', ts: '30.000', channel: { id: 'C1', name: 'eng' }, permalink: 'https://p' },
+      { user: 'ME', text: 'me', ts: '31.000', channel: { id: 'C1', name: 'eng' } },
+      { user: 'U1', text: 'older', ts: '5.000', channel: { id: 'C1', name: 'eng' } },
+    ] } }
+    const m = parseMentions(data, '10.000', 'ME')
+    expect(m).toHaveLength(1)
+    expect(m[0]?.channelName).toBe('#eng')
+    expect(m[0]?.permalink).toBe('https://p')
+  })
+  test('conversations and markup', () => {
+    expect(parseConversations({ channels: [{ id: 'D1', is_im: true, user: 'U1' }, { id: 'G1', is_mpim: true, name: 'mpdm-a--b' }] }).map(c => c.kind)).toEqual(['dm', 'mpim'])
+    expect(plainText('hey <@U1> see <https://x.y|the doc> in <#C1|eng> &amp; more', { U1: 'jane' })).toBe('hey @jane see the doc (https://x.y) in #eng & more')
+  })
+  test('a slack message outranks a squirrel', () => {
+    const msg = { channel: 'D1', channelName: 'DM from jane', kind: 'dm' as const, user: 'U1', userName: 'jane', text: 'hi', ts: '1.0' }
+    const squirrel = { id: 's', title: 'S', url: 'https://s', blurb: '', source: 'hn' as const, topic: 't', why: 'w', foundAt: 0 }
+    expect(nowCard({ workers: [], picked: ticket('C'), squirrel, slackMsg: msg }).kind).toBe('slack')
+    expect(nowCard({ workers: [worker('B', 'needs-human')], picked: null, squirrel: null, slackMsg: msg }).kind).toBe('worker')
   })
 })
 

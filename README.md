@@ -32,7 +32,10 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 | `/adddd pane` | open the board (NOW card, in-flight list, overlaps) |
 | `/adddd pause` / `resume` | stop picking (workers keep running) |
 | `/adddd status` | text summary of every worktree, readable by the model too |
-| `/adddd open [KEY]` / `back` | put a worker's transcript in the main view, and return |
+| `/adddd meh` / `look` / `slack` / `open` | the squirrel in front of you: dismiss, gist, DM yourself, browser |
+| `/adddd squirrel` | fetch one now |
+| `/adddd say <reply>` / `meh` / `open` / `inbox` | the unread Slack message in front of you: reply, mark read, permalink, check now |
+| `/adddd view [KEY]` / `back` | put a worker's transcript in the main view, and return |
 | `/adddd reply KEY …` | answer a worker explicitly (a plain prompt does this too, see below) |
 | `/adddd review KEY` | commits and files on a worker's branch |
 | `/adddd source linear\|github` | switch backlog per project |
@@ -44,6 +47,12 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 - NOW is a done worker: a prompt is a follow-up (it resumes); `/adddd ok` moves on.
 - NOW is a failed worker: a prompt re-runs it with your new words.
 - NOW is a picked ticket: your prompt dispatches it.
+
+**Squirrels.** Between tickets a 🐿️ card shows up: one real link (a Hacker News story, a GitHub repo, a dev.to post) on a topic inferred from your repo's dependencies and languages, with one line from the model on why you might care. `/adddd meh` dismisses it, `look` fetches the page and puts a three-bullet gist on the card, `open` opens it in your browser, `slack` DMs it to you (set a Slack incoming webhook pointed at your own DM under `/config` → adddd) and moves on. Typing a prompt skips straight past it to the ticket. Set `topics` in `/config` to steer the hunt, or turn `squirrels` off.
+
+**Slack between tickets.** With a Slack *user* token in `/config` → adddd (`slackToken`, stored as a secret), adddd polls every two minutes for unread DMs, group DMs and @mentions of you. Each one becomes a 💬 card served between tickets, ahead of squirrels, chaining until the inbox is empty. `/adddd meh` marks it read, `/adddd say <reply>` answers (in-thread for a channel mention), `/adddd open` jumps to the permalink, `/adddd inbox` checks now. Typing a plain prompt skips the card without marking it read, so a ticket prompt can never land in Slack. With a token set, "slack me" on a squirrel DMs you directly and the webhook is not needed.
+
+To make the token: create a Slack app for your workspace, add these *User Token Scopes* under OAuth & Permissions: `channels:history channels:read groups:history groups:read im:history im:read im:write mpim:history mpim:read mpim:write users:read search:read chat:write`, install it, and copy the User OAuth Token (`xoxp-…`).
 
 Either way the prompt is dropped from the main conversation; the main context stays empty. Slash commands, and prompts typed while a worker's transcript is in view, pass through untouched. Workers commit on `adddd/<KEY>` and never push or open PRs; the branch and worktree stay until `/adddd cleanup`.
 

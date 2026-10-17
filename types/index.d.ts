@@ -33,9 +33,44 @@ export type AddddWorker = {
   updatedAt: number
 }
 
+export type SquirrelSource = 'hn' | 'github' | 'devto'
+
+/** Something shiny between tickets: a real link, curated by the model. */
+export type AddddSquirrel = {
+  id: string
+  title: string
+  url: string
+  blurb: string
+  source: SquirrelSource
+  topic: string
+  /** One line on why the operator might care. */
+  why: string
+  /** Three bullets after "look". */
+  gist?: string[]
+  /** What happened to it: sent to Slack, opened, … */
+  note?: string
+  foundAt: number
+}
+
+/** An unread Slack message in front of the operator. */
+export type AddddSlackMsg = {
+  channel: string
+  channelName: string
+  kind: 'dm' | 'mpim' | 'mention'
+  user: string
+  userName: string
+  text: string
+  ts: string
+  permalink?: string
+  note?: string
+}
+
 export type AddddBoard = {
   workers: AddddWorker[]
   picked: AddddTicket | null
+  squirrel: AddddSquirrel | null
+  slackMsg: AddddSlackMsg | null
+  slackInbox: number
   paused: boolean
   backlogCount: number
   source: AddddSource
