@@ -81,7 +81,8 @@ header.top nav a:hover, header.top nav button:hover { color: var(--accent); }
 .pane .foot { color: var(--dim); white-space: normal; }
 .pane .drawer-head, #boardBtn, .scrim { display: none; }
 
-.band { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding-block: 10px; display: flex; flex-direction: column; gap: 4px; }
+.band { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding-block: 10px; display: flex; flex-direction: column; gap: 4px; max-height: 70vh; overflow-y: auto; }
+.card .reviewed { margin-top: 6px; }
 .band .now { color: var(--accent); font-weight: 700; letter-spacing: 0.08em; font-size: 12px; }
 .card { display: flex; flex-direction: column; gap: 3px; max-width: 90ch; }
 .card .head { font-weight: 700; }
@@ -147,7 +148,7 @@ th { color: var(--dim); font-weight: 500; }
   .main, .dock { display: contents; }
   .dock .intro { display: block; order: 0; color: var(--dim); padding-top: 10px; }
   .dock.started .intro { display: none; }
-  .band { order: 1; border-top: 0; padding-block: 10px; }
+  .band { order: 1; border-top: 0; padding-block: 10px; max-height: none; overflow: visible; }
   .band .now { font-size: 11px; }
   .scroll { order: 2; flex: 1; overflow: visible; min-height: 0; padding-block: 16px 20px; gap: 16px; }
   .composer {
@@ -518,10 +519,11 @@ function answer(w, i, text) {
   setTimeout(() => comeBack(w), rand(2500, 5000));
   render();
 }
+const bodyOf = w => (w.t.done.byReply && w.reply >= 0 ? w.t.done.byReply[w.reply] : w.t.done.body);
 function review(w) {
   w.status = 'dismissed';
   S.reviewed.push(w);
-  const body = w.t.done.byReply && w.reply >= 0 ? w.t.done.byReply[w.reply] : w.t.done.body;
+  const body = bodyOf(w);
   const node = el('article', 'reviewed');
   node.id = 'r-' + w.t.key;
   node.innerHTML = `<h3><span class="ok">✔</span> ${w.t.key} · ${w.t.kind}: ${esc(w.t.title)}</h3>
@@ -640,12 +642,14 @@ ${s.showGist ? s.gist.map(g => `<div>  • ${esc(g)}</div>`).join('') : ''}${s.n
       placeholder = phone() ? 'or type your own reply' : w.t.ask.replies[0];
     } else {
       const d = w.t.done;
-      html += `<div class="card"><div class="head"><span class="ok">✅ ${w.t.key}</span> done, review me <span class="dim">· ${ago(w.updatedAt, now)} · adddd/${w.t.key}</span></div>
+      html += `<div class="card"><div class="head"><span class="ok">✅ ${w.t.key}</span> done <span class="dim">· ${ago(w.updatedAt, now)} · adddd/${w.t.key}</span></div>
 <div class="dim">you said: "${esc(said)}"</div><div>${esc(d.summary)}</div>
 <div class="ok">checks: ${esc(d.checks)}</div>
 <div class="dim">start here: ${d.files[0]} · ${d.files.length} file${d.files.length === 1 ? '' : 's'} · 1 commit</div>
-<div class="keys grid">${key(1, 'reviewed, next')}${key(2, 'open transcript')}</div></div>`;
-      placeholder = phone() ? 'or type a follow-up' : 'press 1 to review, or type a follow-up';
+<div class="reviewed">${bodyOf(w)}</div>
+<div class="keys">${key(1, 'ok, next')}</div>
+<div class="dim"><span class="kbd">read it, then press 1 to free the slot. or type a follow-up and Enter.</span><span class="tap">read it, then tap ok to free the slot. or type a follow-up below.</span></div></div>`;
+      placeholder = phone() ? 'or type a follow-up' : 'press 1 when you have read it, or type a follow-up';
     }
   }
   html += `<div class="status">${statusLine()}</div>`;
@@ -707,7 +711,6 @@ function press(k) {
       const r = w.t.ask.replies[n - 1]; if (r) answer(w, n - 1, r);
     } else {
       if (n === 1) review(w);
-      if (n === 2) toast(`no transcript here; in the real thing, 2 opens the worker's own conversation and your next Enter goes to it.`);
     }
     return;
   }
