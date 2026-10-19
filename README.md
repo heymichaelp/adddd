@@ -4,6 +4,8 @@ A Claude Code plugin for brains that work best with exactly one thing in front o
 
 adddd picks a ticket from your backlog, lets you type **one** prompt, ships that prompt plus the ticket to a background worker in its own git worktree, and immediately surfaces the next ticket. Worktrees come back to you only when they need a human: a question, a blocker, or done-and-ready-for-review. Unlimited workers in flight; you handle one card at a time.
 
+**[adddd.dev](https://adddd.dev)** is the site, and it works the same way: the content is a backlog you dispatch, one card at a time. Prefer to just read it? [adddd.dev/#read](https://adddd.dev/#read).
+
 ```
 🎯 ENG-123 · Fix the login flake (urgent)
    type ONE prompt and press Enter. it ships to a worktree and you never see it again (until it needs you).
