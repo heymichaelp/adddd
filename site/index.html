@@ -78,6 +78,7 @@ header.top nav a:hover, header.top nav button:hover { color: var(--accent); }
 .pane li button { text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .pane li button:hover { color: var(--accent); }
 .pane .foot { color: var(--dim); white-space: normal; }
+.pane .toggle { display: none; }
 
 .band { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding-block: 10px; display: flex; flex-direction: column; gap: 4px; }
 .band .now { color: var(--accent); font-weight: 700; letter-spacing: 0.08em; font-size: 12px; }
@@ -132,8 +133,8 @@ th { color: var(--dim); font-weight: 500; }
 .read h1 { margin: 0; font-size: 22px; letter-spacing: 0.04em; }
 .read .reviewed { border-left-color: var(--accent); }
 
-@media (max-width: 860px) {
-  /* phone: the NOW card is the page. buttons look like buttons, the feed runs newest-first underneath, the pane is gone. */
+@media (max-width: 860px), (orientation: portrait) and (max-width: 1100px) {
+  /* phone, or any portrait screen: the NOW card is the page. buttons look like buttons, the feed runs newest-first underneath, the pane is gone. */
   html, body { height: auto; }
   body { display: block; font-size: 13px; line-height: 1.5; }
   header.top { gap: 4px 12px; padding-block: 8px; }
@@ -143,8 +144,15 @@ th { color: var(--dim); font-weight: 500; }
   .main { display: contents; }
   .dock { order: 0; padding-top: 10px; }
   .dock .intro { display: block; color: var(--dim); margin-bottom: 8px; }
-  .scroll { order: 1; overflow: visible; min-height: 0; padding-block: 16px 28px; gap: 16px; }
-  .pane, .banner, .kbd, .composer .hint { display: none; }
+  .scroll { order: 2; overflow: visible; min-height: 0; padding-block: 16px 28px; gap: 16px; }
+  .pane { order: 1; display: block; border-left: 0; padding: 0; overflow: visible; font-size: inherit; }
+  .pane .toggle { display: block; width: 100%; text-align: left; color: var(--dim); padding: 10px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .pane .toggle b { color: var(--accent); font-weight: 700; }
+  .pane .body { display: none; padding-top: 12px; }
+  .pane.open .body { display: block; }
+  .pane li, .pane li button { white-space: normal; }
+  .pane li button { padding: 4px 0; }
+  .banner, .kbd, .composer .hint { display: none; }
   .tap { display: inline; }
   .band { border-top: 0; padding-block: 8px 10px; }
   .band .now { font-size: 11px; }
@@ -532,7 +540,7 @@ function guardBreak() {
 
 // ---------- rendering ----------
 /** on a phone the card sits at the top and the feed runs newest-first under it; on a desktop it is a terminal with scrollback */
-const PHONE = window.matchMedia('(max-width: 860px)');
+const PHONE = window.matchMedia('(max-width: 860px), (orientation: portrait) and (max-width: 1100px)');
 const phone = () => PHONE.matches;
 function feed(node, toNode) {
   const sc = $('scroll');
@@ -638,15 +646,19 @@ function renderPane(now) {
   const done = S.workers.filter(w => w.status === 'done');
   const glyph = w => w.status === 'running' ? '◐' : w.status === 'needs-human' ? '❓' : '✅';
   const rows = [...waiting, ...done, ...running];
-  let html = `<h2>In flight <span class="dim">(${running.length} running · ${waiting.length} waiting on you · ${done.length} done)</span></h2><ul>`;
+  const open = S.workers.filter(w => w.status !== 'dismissed').length;
+  let html = `<button type="button" class="toggle" aria-expanded="${S.boardOpen ? 'true' : 'false'}"><b>${S.boardOpen ? '▾' : '▸'}</b> board · ${running.length} in flight${waiting.length ? ` · ${waiting.length} waiting on you` : ''}${done.length ? ` · ${done.length} done` : ''} · ${S.reviewed.length} reviewed</button><div class="body">`;
+  html += `<h2>In flight <span class="dim">(${running.length} running · ${waiting.length} waiting on you · ${done.length} done)</span></h2><ul>`;
   html += rows.length ? rows.map(w => `<li class="${w.status === 'running' ? 'dim' : ''}">${glyph(w)} ${w.t.key} ${esc(w.t.title)} <span class="dim">· ${ago(w.updatedAt, now)}</span></li>`).join('') : '<li class="dim">no worktrees yet. dispatch something.</li>';
   html += '</ul>';
   html += `<h2>Reviewed <span class="dim">(${S.reviewed.length})</span></h2><ul>`;
   html += S.reviewed.length ? S.reviewed.map(w => `<li><button type="button" data-goto="r-${w.t.key}">✔ ${w.t.key} ${esc(w.t.title)}</button></li>`).join('') : '<li class="dim">nothing yet. it piles up here.</li>';
   html += '</ul>';
-  html += `<div class="foot">site · ${S.backlog.length} in backlog · ${S.workers.filter(w => w.status !== 'dismissed').length}/6 worktrees${S.picked ? ` · picked ${S.picked.key}` : ''}</div>`;
+  html += `<div class="foot">site · ${S.backlog.length} in backlog · ${open}/6 worktrees${S.picked ? ` · picked ${S.picked.key}` : ''}</div></div>`;
   const pane = $('pane');
   pane.innerHTML = html;
+  pane.classList.toggle('open', !!S.boardOpen);
+  pane.querySelector('.toggle').addEventListener('click', () => { S.boardOpen = !S.boardOpen; renderPane(Date.now()); });
   pane.querySelectorAll('button[data-goto]').forEach(b => b.addEventListener('click', () => {
     const n = $(b.dataset.goto); if (!n) return;
     n.scrollIntoView({ block: 'start', behavior: 'smooth' });
