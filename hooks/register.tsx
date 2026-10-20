@@ -734,7 +734,8 @@ async function captureIdea($: EngineInterface, text: string): Promise<string> {
 }
 
 /** Files the follow-up a worker suggested as a backlog ticket, from its done card. */
-async function fileSuggestion($: EngineInterface, w: AddddWorker): Promise<string> {
+async function fileSuggestion($: EngineInterface, shown: AddddWorker): Promise<string> {
+  const w = workers.find(x => x.key === shown.key) ?? shown // the card may hold a copy; mutate the registry's own
   if (!w.suggest) return `${w.key} did not suggest anything.`
   if (w.filed) return `already filed as ${w.filed}.`
   const now = await $.clock.now()
@@ -833,8 +834,9 @@ const actions = ($: EngineInterface): Actions => ({
     viewing = undefined
     void $.ui.view({})
   },
-  dismiss: w => {
+  dismiss: shown => {
     void (async () => {
+      const w = workers.find(x => x.key === shown.key) ?? shown
       w.status = 'dismissed'
       await afterSlotFreed($)
       await publish($)
