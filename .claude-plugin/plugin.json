@@ -1,6 +1,6 @@
 {
   "name": "adddd",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "MIT",
   "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited workers in the background.",
   "types": "./types/index.d.ts",

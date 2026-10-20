@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 — 2026-10-20
+
+- Fix: `file it` and `dismiss` on a card now act on the registry's own worker, so filing a suggestion or parking a worker sticks.
+
 ## 0.6.0 — 2026-10-20
 
 - Workers can suggest a follow-up: a `suggest:` line in the status block becomes a 💡 line on the done card with `2: file it`, which files it into Linear or GitHub Issues without leaving the card (`/adddd file [KEY]` does the same).
