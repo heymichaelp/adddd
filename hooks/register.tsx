@@ -73,15 +73,15 @@ type Persisted = { workers?: AddddWorker[]; picked?: AddddTicket | null; source?
 
 const USAGE = [
   '/adddd            pick a ticket (or re-pick) and wait for your one prompt',
-  '/adddd next       skip the picked ticket',
+  '/adddd next       whatever is in front of you, next: a squirrel or nudge goes away, a ticket is skipped',
   '/adddd pane       open the board',
   '/adddd pause|resume',
   '/adddd status     what every worktree is doing',
   '/adddd source linear|github',
   '/adddd ok [KEY|all]  dismiss the card in front of you (or one, or every done one)',
-  '/adddd meh|gist|slack|browser   the squirrel in front of you: dismiss, gist, DM yourself, browser (look/open still work)',
+  '/adddd next|gist|slack|browser  the squirrel in front of you: next, gist, DM yourself, browser (meh/look/open still work)',
   '/adddd did|never   an off-screen card: you did the thing · never show that one again',
-  '/adddd say <reply> · meh · browser   the Slack message in front of you · /adddd inbox checks now',
+  '/adddd say <reply> · next · browser   the Slack message in front of you · /adddd inbox checks now',
   '/adddd squirrel      fetch one now',
   '/adddd idea <text>   file it in the backlog and stay on your card (later: file the squirrel in front of you)',
   '/adddd standup       three lines on yesterday / today / blocked, copied for you',
@@ -599,7 +599,7 @@ async function declare($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'adddd',
     description: 'ADD-driven development: one ticket, one prompt, one worktree at a time',
-    argumentHint: '[next|ok|meh|did|never|gist|slack|browser|view|reply|pane|pause|status|source|review|retry|cleanup]',
+    argumentHint: '[next|ok|did|never|gist|slack|browser|idea|standup|eod|view|reply|pane|pause|status|source|review|retry|cleanup]',
   })
 }
 
@@ -960,12 +960,6 @@ export const register: Register = (on, options) => {
         await publish($)
         return { text: pickedText(t) }
       }
-      case 'next':
-      case 'skip': {
-        const t = await pickNext($, picked?.key)
-        await publish($)
-        return { text: pickedText(t) }
-      }
       case 'pane': {
         const opened = await $.ui.open({ id: PANE, title: 'adddd' })
         return { text: opened.isPlaced ? 'adddd board opened.' : `adddd board waits: ${opened.reason}` }
@@ -983,16 +977,23 @@ export const register: Register = (on, options) => {
       }
       case 'status':
         return { text: statusText(now) }
+      case 'next':
+      case 'skip':
       case 'meh':
       case 'skipsquirrel': {
+        // next means: whatever is in front of you, the next thing. a squirrel, a nudge or a Slack message goes away; a ticket is skipped.
+        if (!slackMsg && !squirrel) {
+          const t = await pickNext($, picked?.key)
+          await publish($)
+          return { text: pickedText(t) }
+        }
         if (slackMsg) {
           const gone = `${slackMsg.userName} in ${slackMsg.channelName}`
           await dismissSlack($)
           await publish($)
           return { text: `💬 ${gone} → marked read.${slackMsg ? ` next: ${slackMsg.userName}` : ''}` }
         }
-        if (!squirrel) return { text: 'nothing in front of you to dismiss.' }
-        const gone = squirrel.title
+        const gone = squirrel?.title ?? ''
         await dismissSquirrel($)
         await publish($)
         return { text: `🐿️ ${gone} → gone.` }

@@ -110,7 +110,7 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
         {m.note ? <Text color="green">{m.note}</Text> : null}
         <Box gap={1}>
           <Button key="meh" hotkey="1" plain onPress={a.meh}>
-            meh (mark read)
+            next (mark read)
           </Button>
           <Button key="say" hotkey="2" plain onPress={a.say}>
             say…
@@ -120,7 +120,7 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
           </Button>
         </Box>
         <Text dimColor>
-          /adddd meh · say &lt;reply&gt; · browser{board.slackInbox > 0 ? ` · ${board.slackInbox} more waiting` : ''}
+          /adddd next · say &lt;reply&gt; · browser{board.slackInbox > 0 ? ` · ${board.slackInbox} more waiting` : ''}
           {behind}
         </Text>
       </Box>
@@ -142,7 +142,7 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
           {s.note ? <Text color="green">{s.note}</Text> : null}
           <Box gap={1}>
             <Button key="meh" hotkey="1" plain onPress={a.meh}>
-              meh
+              next
             </Button>
             <Button key="did" hotkey="2" plain onPress={a.didIt}>
               did it
@@ -155,7 +155,7 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
             </Button>
           </Box>
           <Text dimColor>
-            /adddd meh · did · slack · never
+            /adddd next · did · slack · never
             {behind}
           </Text>
         </Box>
@@ -182,7 +182,7 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
         <Text dimColor>{s.url}</Text>
         <Box gap={1}>
           <Button key="meh" hotkey="1" plain onPress={a.meh}>
-            meh
+            next
           </Button>
           <Button key="gist" hotkey="2" plain onPress={a.look}>
             gist
@@ -195,7 +195,7 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
           </Button>
         </Box>
         <Text dimColor>
-          /adddd meh · gist · slack · browser
+          /adddd next · gist · slack · browser
           {behind}
         </Text>
       </Box>
