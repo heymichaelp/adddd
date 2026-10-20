@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>adddd</title>
+<title>adddd · rails to fly off of</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="adddd: ADD-driven development. A plugin for coding agents that hands you one ticket at a time and runs the rest in background worktrees. This site works the same way.">
+<meta name="description" content="adddd: ADD-driven development. Rails to fly off of. A plugin for coding agents that hands you one ticket at a time and runs the rest in background worktrees. This site works the same way.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%23c026d3'/%3E%3Ctext x='32' y='44' font-family='monospace' font-size='34' font-weight='700' text-anchor='middle' fill='white'%3E❯_%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,700;1,400&display=swap">
@@ -23,20 +23,51 @@
   --bad: #b3261e;
   --info: #0b6e7a;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  --glyph: "❯"; --say-glyph: "●";
+  --card-bg: #ffffff; --card-border: #e4e0d8;
   color-scheme: light;
 }
+/* host skins: the accent, the prompt glyph and the input chrome are what you notice first in each tool. an approximation, not the real thing. */
+:root[data-agent="claude"] { --accent: #c2410c; }
+:root[data-agent="codex"] { --accent: #0f9d7a; --info: #2563eb; --glyph: "›"; --say-glyph: "•"; }
+:root[data-agent="gemini"] { --accent: #3b7ddd; --info: #8b5cf6; --glyph: ">"; --say-glyph: "✦"; }
+:root[data-agent="codex"] .composer input, :root[data-agent="gemini"] .composer input { border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; background: var(--bg-2); }
+:root[data-agent="gemini"] .composer input { border-color: var(--accent); }
+:root[data-agent="gemini"] .band { border-color: var(--accent); }
+:root[data-agent="codex"] .band .now, :root[data-agent="codex"] .pane h2, :root[data-agent="codex"] .sash-label { letter-spacing: 0.02em; text-transform: none; }
+/* tracker skins: the sash borrows each tracker's card language. also an approximation. */
+:root[data-tracker="linear"] .tcard, :root[data-tracker="github"] .tcard { font-family: var(--sans); background: var(--card-bg); border-color: var(--card-border); }
+:root[data-tracker="linear"] .tcard { border-radius: 8px; }
+:root[data-tracker="linear"] .tcard .k { color: var(--dim); font-weight: 500; font-size: 11px; }
+:root[data-tracker="linear"] .tcard .t { font-weight: 500; }
+:root[data-tracker="linear"] .tcard .t::before { content: "◌ "; color: var(--dim); }
+:root[data-tracker="linear"] .tcard .bars { color: var(--fg); letter-spacing: 1px; }
+:root[data-tracker="github"] .tcard { border-radius: 6px; }
+:root[data-tracker="github"] .tcard .k { color: var(--dim); font-weight: 400; }
+:root[data-tracker="github"] .tcard .t { font-weight: 600; }
+:root[data-tracker="github"] .tcard .t::before { content: "⊙ "; color: var(--ok); }
+:root[data-tracker="github"] .tcard .pill { display: inline-block; border: 1px solid var(--card-border); border-radius: 999px; padding: 0 7px; font-size: 11px; line-height: 17px; margin-right: 4px; background: var(--bg-2); }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #14120f; --bg-2: #1d1a16; --fg: #ece6da; --dim: #8f877a; --rule: #2d2823;
     --accent: #e879f9; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --info: #67e8f9;
+    --card-bg: #1d1a16; --card-border: #34302a;
     color-scheme: dark;
   }
+  :root:not([data-theme="light"])[data-agent="claude"] { --accent: #f0875a; }
+  :root:not([data-theme="light"])[data-agent="codex"] { --accent: #34d399; --info: #60a5fa; }
+  :root:not([data-theme="light"])[data-agent="gemini"] { --accent: #7cacf8; --info: #c4a0ff; }
 }
 :root[data-theme="dark"] {
   --bg: #14120f; --bg-2: #1d1a16; --fg: #ece6da; --dim: #8f877a; --rule: #2d2823;
   --accent: #e879f9; --ok: #4ade80; --warn: #fbbf24; --bad: #f87171; --info: #67e8f9;
+  --card-bg: #1d1a16; --card-border: #34302a;
   color-scheme: dark;
 }
+:root[data-theme="dark"][data-agent="claude"] { --accent: #f0875a; }
+:root[data-theme="dark"][data-agent="codex"] { --accent: #34d399; --info: #60a5fa; }
+:root[data-theme="dark"][data-agent="gemini"] { --accent: #7cacf8; --info: #c4a0ff; }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { height: 100%; }
@@ -57,12 +88,14 @@ button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid 
 .ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .info { color: var(--info); }
 .b { font-weight: 700; }
 
+.topbar { position: sticky; top: 0; z-index: 20; background: var(--bg); padding-top: env(safe-area-inset-top, 0px); }
 header.top {
   display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
   padding-block: 10px 8px; border-bottom: 1px solid var(--rule);
 }
 header.top .mark { font-weight: 700; letter-spacing: 0.04em; }
 header.top .mark span { color: var(--accent); }
+header.top .mark .dim { color: var(--dim); font-weight: 400; }
 header.top nav { margin-left: auto; display: flex; gap: 14px; flex-wrap: wrap; }
 header.top nav a, header.top nav button { color: var(--dim); text-decoration: none; }
 header.top nav a:hover, header.top nav button:hover { color: var(--accent); }
@@ -71,6 +104,7 @@ header.top nav a:hover, header.top nav button:hover { color: var(--accent); }
 .main { min-width: 0; display: flex; flex-direction: column; min-height: 0; }
 .scroll { flex: 1; min-height: 0; overflow-y: auto; padding-block: 14px 8px; display: flex; flex-direction: column; gap: 14px; }
 .scroll > * { max-width: 78ch; }
+.scroll > :first-child { margin-top: auto; }
 .pane { border-left: 1px solid var(--rule); padding: 14px 0 14px 18px; overflow-y: auto; min-width: 0; font-size: 13px; }
 .pane h2 { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 6px; }
 .pane h2 .dim { text-transform: none; letter-spacing: 0; font-weight: 400; }
@@ -87,24 +121,40 @@ header.top nav a:hover, header.top nav button:hover { color: var(--accent); }
 .card { display: flex; flex-direction: column; gap: 3px; max-width: 90ch; }
 .card .head { font-weight: 700; }
 .card .q { font-style: italic; }
+.card a { overflow-wrap: anywhere; }
 .keys { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 4px; }
 .keys button { color: var(--fg); }
 .keys button:hover { color: var(--accent); }
 .keys button b { color: var(--accent); font-weight: 700; }
+.keys button b::after { content: ":"; }
+/* each host prints its options its own way: Claude Code as hotkey lines, Codex as a › selection list, Gemini CLI as a ● radio list */
+:root[data-agent="codex"] .keys button b::after, :root[data-agent="gemini"] .keys button b::after { content: "."; }
+:root[data-agent="codex"] .keys button::before { content: "  "; white-space: pre; }
+:root[data-agent="codex"] .keys button[data-key="1"]::before { content: "› "; color: var(--accent); font-weight: 700; }
+:root[data-agent="gemini"] .keys button::before { content: "○ "; color: var(--dim); }
+:root[data-agent="gemini"] .keys button[data-key="1"]::before { content: "● "; color: var(--accent); }
 .keys button.full { display: block; max-width: 100%; text-align: left; }
 .keys.col { flex-direction: column; gap: 2px; }
-.tap, .dock .intro { display: none; }
+.tap { display: none; }
 .entry .drop .seg + .seg::before { content: " ⟶ "; }
 .status { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
 
 .composer { display: flex; align-items: center; gap: 8px; padding-block: 10px 12px; }
 .composer .prompt { color: var(--accent); font-weight: 700; }
+.composer .prompt::before { content: var(--glyph); }
 .composer input { flex: 1; min-width: 0; background: transparent; border: 0; font: inherit; color: var(--fg); padding: 2px 0; }
 .composer input::placeholder { color: var(--dim); opacity: 1; }
 .composer .hint { color: var(--dim); font-size: 12px; white-space: nowrap; }
+.agents { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 0 0; font-size: 12px; }
+.agents .lbl { color: var(--dim); white-space: nowrap; flex: 0 0 auto; }
+.agents button { border: 1px solid var(--rule); border-radius: 999px; padding: 3px 10px; background: var(--bg-2); color: var(--fg); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.agents button.run { color: var(--dim); }
+.agents button.warn { border-color: var(--warn); }
+.agents button.ok { border-color: var(--ok); }
+@media (hover: hover) { .agents button:hover { border-color: var(--accent); } }
 
 .entry { display: flex; flex-direction: column; gap: 4px; }
-.entry .cmd::before { content: "❯ "; color: var(--accent); font-weight: 700; }
+.entry .cmd::before { content: var(--glyph) " "; color: var(--accent); font-weight: 700; }
 .entry .cmd { white-space: pre-wrap; }
 .entry .drop { color: var(--dim); }
 .entry .drop::before { content: "● "; }
@@ -122,14 +172,34 @@ td, th { text-align: left; vertical-align: top; padding: 3px 14px 3px 0; border-
 th { color: var(--dim); font-weight: 500; }
 .tablewrap { overflow-x: auto; }
 
-.toast {
-  position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  background: var(--bg-2); border: 1px solid var(--rule); color: var(--fg); padding: 8px 12px; border-radius: 4px;
-  max-width: min(60ch, calc(100vw - 32px)); font-size: 13px; box-shadow: 0 6px 20px rgba(0,0,0,0.18); z-index: 20;
-}
-.banner { color: var(--dim); display: flex; flex-direction: column; gap: 2px; }
-.banner .wordmark { color: var(--fg); font-weight: 700; font-size: 20px; letter-spacing: 0.06em; line-height: 1.2; }
-.banner .wordmark span { color: var(--accent); }
+.say { color: var(--dim); }
+.say::before { content: var(--say-glyph) " "; color: var(--accent); }
+.say.demo { color: var(--info); }
+.pointer { position: fixed; z-index: 60; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: 0 2px 10px rgba(0,0,0,0.25); pointer-events: none; opacity: 0; transition: left 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), top 0.7s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s; }
+.pointer.show { opacity: 1; }
+.pointer.tap { animation: tap 0.4s ease-out; }
+@keyframes tap { 0% { transform: scale(1); } 45% { transform: scale(0.55); background: var(--accent); } 100% { transform: scale(1); } }
+.keycap { position: fixed; z-index: 60; left: 50%; bottom: 140px; transform: translateX(-50%) translateY(6px); font: 700 16px var(--mono); background: var(--fg); color: var(--bg); padding: 8px 16px; border-radius: 8px; box-shadow: 0 4px 0 rgba(0,0,0,0.35), 0 6px 18px rgba(0,0,0,0.25); pointer-events: none; opacity: 0; transition: opacity 0.18s, transform 0.18s; white-space: nowrap; max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis; }
+.keycap.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.say.demo::before { content: "🎬 "; }
+.sash { border-bottom: 1px solid var(--rule); padding: 8px 0 8px; display: flex; flex-direction: column; gap: 6px; }
+.sash-label { color: var(--accent); font-weight: 700; letter-spacing: 0.08em; font-size: 12px; }
+.sash-label .dim { font-weight: 400; letter-spacing: 0; }
+.sash-label .srcBtn { color: var(--info); font-weight: 700; letter-spacing: 0; border-bottom: 1px dashed var(--info); }
+@media (hover: hover) { .sash-label .srcBtn:hover { color: var(--accent); border-color: var(--accent); } }
+.sash-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 4px; -webkit-overflow-scrolling: touch; }
+.tcard { flex: 0 0 auto; width: 210px; scroll-snap-align: start; text-align: left; border: 1px solid var(--rule); border-radius: 6px; background: var(--bg-2); padding: 8px 10px; display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.4; cursor: default; }
+.tcard .k { color: var(--accent); font-weight: 700; }
+.tcard .t { color: var(--fg); font-size: 13px; }
+.tcard.picked { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.tcard.fresh { border-color: var(--ok); box-shadow: inset 0 0 0 1px var(--ok); }
+.card .suggest { color: var(--info); }
+.wordmark { color: var(--fg); font-weight: 700; font-size: 20px; letter-spacing: 0.06em; line-height: 1.2; margin-bottom: 6px; }
+.wordmark span { color: var(--accent); }
+.wordmark .g::before { content: var(--glyph); }
+.wordmark .tagline { color: var(--dim); font-weight: 400; font-size: 13px; letter-spacing: 0; margin-left: 6px; }
+.agent { border-left: 2px solid var(--accent); padding-left: 12px; display: flex; flex-direction: column; gap: 6px; }
+.agent p { margin: 0; }
 
 .read { max-width: 78ch; padding-block: 18px 40px; display: flex; flex-direction: column; gap: 22px; }
 .read h1 { margin: 0; font-size: 22px; letter-spacing: 0.04em; }
@@ -140,22 +210,23 @@ th { color: var(--dim); font-weight: 500; }
   html, body { height: auto; }
   body { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; font-size: 13px; line-height: 1.5; }
   header.top { gap: 4px 12px; padding-block: 8px; }
-  header.top .mark .dim { display: none; }
+  header.top .mark .dim { font-size: 12px; }
   header.top nav { gap: 12px; }
   #boardBtn { display: inline; }
   #boardBtn b { color: var(--accent); font-weight: 700; }
   .term { flex: 1; display: flex; flex-direction: column; min-height: 0; }
   .main, .dock { display: contents; }
-  .dock .intro { display: block; order: 0; color: var(--dim); padding-top: 10px; }
-  .dock.started .intro { display: none; }
-  .band { order: 1; border-top: 0; padding-block: 10px; max-height: none; overflow: visible; }
+  .band { order: 2; border-top: 1px solid var(--rule); border-bottom: 0; padding-block: 10px; max-height: none; overflow: visible; scroll-margin-top: calc(var(--top-h, 0px) + 8px); }
   .band .now { font-size: 11px; }
-  .scroll { order: 2; flex: 1; overflow: visible; min-height: 0; padding-block: 16px 20px; gap: 16px; }
-  .composer {
+  .scroll { order: 1; flex: 1; overflow: visible; min-height: 0; padding-block: 16px 16px; gap: 16px; }
+  .tray {
     order: 3; position: sticky; bottom: 0; z-index: 10; background: var(--bg); border-top: 1px solid var(--rule);
     margin-left: calc(-1 * max(16px, env(safe-area-inset-left, 0px))); margin-right: calc(-1 * max(16px, env(safe-area-inset-right, 0px)));
-    padding: 8px max(16px, env(safe-area-inset-right, 0px)) calc(8px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
   }
+  .composer { padding: 8px 0 6px; }
+  .agents { flex-wrap: nowrap; overflow-x: auto; padding: 8px 0 0; -webkit-overflow-scrolling: touch; }
+  .agents button { min-height: 32px; }
   .composer input { border: 1px solid var(--rule); border-radius: 6px; padding: 9px 12px; background: var(--bg-2); min-height: 44px; font-size: 16px; }
   .composer .hint { display: none; }
   .pane {
@@ -170,21 +241,21 @@ th { color: var(--dim); font-weight: 500; }
   .pane li button { padding: 4px 0; }
   .scrim { display: block; position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 39; }
   .scrim[hidden] { display: none; }
-  .banner, .kbd { display: none; }
+  .kbd { display: none; }
+  .tcard { width: 160px; padding: 6px 9px; }
+  .sash { padding-top: 6px; }
   .tap { display: inline; }
   .card { gap: 4px; }
-  .keys, .keys.col { flex-direction: column; gap: 6px; margin-top: 8px; }
-  .keys.grid { display: grid; grid-template-columns: 1fr 1fr; }
-  .keys button { display: block; width: 100%; text-align: left; border: 1px solid var(--rule); border-radius: 6px; padding: 9px 12px; background: var(--bg-2); min-height: 44px; line-height: 1.4; -webkit-tap-highlight-color: transparent; }
-  .keys button:active { border-color: var(--accent); }
-  .keys button b { display: none; }
-  .keys button[data-key="0"] { border: 0; background: none; color: var(--dim); min-height: 0; padding: 4px 0; }
+  .keys { gap: 2px 18px; margin-top: 6px; }
+  .keys.col { flex-direction: column; gap: 2px; }
+  .keys button { padding: 7px 0; line-height: 1.4; text-align: left; -webkit-tap-highlight-color: transparent; }
+  .keys button:active { color: var(--accent); }
+  .keys button.full { width: 100%; }
   .status { margin-top: 6px; }
   .entry .drop::before { content: none; }
   .entry .drop .seg { display: block; }
   .entry .drop .seg + .seg::before { content: "↳ "; }
-  .reviewed { padding-left: 10px; scroll-margin-top: 8px; }
-  .toast { left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); max-width: none; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); }
+  .reviewed { padding-left: 10px; scroll-margin-top: calc(var(--top-h, 0px) + 8px); }
 }
 @media (prefers-reduced-motion: no-preference) {
   .cursor { animation: blink 1.1s steps(2, start) infinite; }
@@ -194,33 +265,45 @@ th { color: var(--dim); font-weight: 500; }
 </style>
 </head>
 <body>
+<div class="topbar" id="topbar">
 <header class="top">
-  <div class="mark">adddd<span>.dev</span> <span class="dim">· ADD-driven development · a plugin for coding agents</span></div>
+  <div class="mark">adddd<span>.dev</span> <span class="dim"><span class="sep">· </span>rails to fly off of</span></div>
   <nav>
     <button type="button" id="soundBtn" aria-pressed="true">sound: on</button>
     <button type="button" id="readBtn">read it plain</button>
+    <button type="button" id="agentBtn" title="style the page like another coding agent">in Claude Code ⇄</button>
     <button type="button" id="boardBtn" aria-expanded="false" aria-controls="pane">board</button>
+    <button type="button" id="resetBtn" title="start the simulation over; your settings stay">reset</button>
     <a href="https://github.com/heymichaelp/adddd">github</a>
   </nav>
 </header>
 
+<div class="sash" id="sash" aria-label="backlog"></div>
+</div>
+
 <div class="term" id="term">
   <div class="main">
     <div class="scroll" id="scroll">
-      <div class="banner">
-        <div class="wordmark">❯ add<span>dd</span></div>
-        <div>This site is a backlog. You are the operator. One card at a time; press a number or type a prompt and hit Enter. The content comes back when a worker is done with it. Squirrels are live from the web. Nudges are real; go do them.</div>
-        <div>Not in the mood? <a href="#read" id="readLink">Read it plain.</a></div>
+      <div class="entry pitch">
+        <div class="wordmark"><span class="g"></span> add<span>dd</span> <span class="tagline">rails to fly off of</span></div>
+        <div class="cmd">give me the flyover.</div>
+        <div class="agent">
+          <p><b>adddd</b> (ADD-driven development) is a plugin for coding agents, for brains that want exactly one thing in front of them. One ticket, one prompt, and it ships to a background worker in its own worktree.</p>
+          <p>It comes back only when it needs you; by then the next card is already up. Every card comes with numbered options, the ones most likely to be right, and you can always type your own instead.</p>
+          <p>This page works the same way: the sash stands in for your tracker, type /adddd and the plugin picks from it, or press 1 below to watch it drive itself. Not in the mood? <a href="#read" id="readLink">Read it plain.</a></p>
+        </div>
       </div>
     </div>
     <div class="dock">
-      <div class="intro">This site is a backlog and you are the operator. One card at a time: tap a prompt, the worker brings the content back underneath. Not in the mood? <a href="#read" id="readLink2">Read it plain.</a></div>
       <div class="band" id="band" aria-live="polite"></div>
-      <form class="composer" id="composer" autocomplete="off">
-        <span class="prompt">❯</span>
-        <input id="input" type="text" aria-label="your one prompt" placeholder="" spellcheck="false">
-        <span class="hint" id="hint">Enter sends · digits press buttons</span>
-      </form>
+      <div class="tray" id="tray">
+        <div class="agents" id="agents" hidden></div>
+        <form class="composer" id="composer" autocomplete="off">
+          <span class="prompt"></span>
+          <input id="input" type="text" aria-label="your one prompt" placeholder="" spellcheck="false">
+          <span class="hint" id="hint">Enter sends · digits press buttons</span>
+        </form>
+      </div>
     </div>
   </div>
   <aside class="pane" id="pane"></aside>
@@ -234,95 +317,99 @@ th { color: var(--dim); font-weight: 500; }
 (() => {
 'use strict';
 // ---------- the backlog: every ticket is a piece of the site ----------
-const INSTALL_LINEAR = `<p>In Claude Code, at the prompt:</p>
+const INSTALL_LINEAR = `<p>In Claude Code:</p>
 <pre><code>/plugin install adddd --marketplace heymichaelp/adddd</code></pre>
-<p>Answer <code>y</code> to add the marketplace. Then <code>/config</code> → adddd → <code>source: linear</code>. The plugin lists Linear's MCP server itself; the first <code>/adddd</code> asks you to sign in to Linear once. Dispatch moves a ticket to In Progress, done moves it to In Review.</p>
-<p>Then <code>/adddd</code>. That is the whole setup. Other agent hosts: the repo follows the Agent Plugins 1.0.0 layout (<code>plugin.json</code>, <code>mcp.json</code>, <code>skills/</code>); point your host at it.</p>`;
-const INSTALL_GITHUB = `<p>In Claude Code, at the prompt:</p>
+<p>Answer <code>y</code>, then <code>/config</code> → adddd → <code>source: linear</code>. The first <code>/adddd</code> signs you in to Linear once.</p>
+<p>Then <code>/adddd</code>. Dispatch moves a ticket to In Progress; done moves it to In Review.</p>`;
+const INSTALL_GITHUB = `<p>In Claude Code:</p>
 <pre><code>/plugin install adddd --marketplace heymichaelp/adddd</code></pre>
-<p>Answer <code>y</code> to add the marketplace. Then <code>/config</code> → adddd → <code>source: github</code>. It uses the <code>gh</code> you are already logged in with and reads the repo's open issues; dispatch labels a ticket <code>adddd:in-progress</code>, done relabels it <code>adddd:review</code>.</p>
-<p>Then <code>/adddd</code>. That is the whole setup.</p>`;
-const INSTALL_BOTH = `<p>Fair. Install once, switch per repo:</p>
+<p>Answer <code>y</code>, then <code>/config</code> → adddd → <code>source: github</code>. It uses the <code>gh</code> you are already logged in with.</p>
+<p>Then <code>/adddd</code>. Dispatch labels the issue <code>adddd:in-progress</code>; done relabels it <code>adddd:review</code>.</p>`;
+const INSTALL_BOTH = `<p>Fair. Install once:</p>
 <pre><code>/plugin install adddd --marketplace heymichaelp/adddd</code></pre>
-<p><code>/adddd source linear</code> or <code>/adddd source github</code> in each project, or set it under <code>/config</code> → adddd. Linear signs you in once through its MCP server; GitHub uses the <code>gh</code> you already have.</p>
+<p>Then <code>/adddd source linear</code> or <code>/adddd source github</code> in each project.</p>
 <p>Then <code>/adddd</code>. That is the whole setup.</p>`;
 
 const TICKETS = [
-  { key: 'SITE-1', kind: 'SPIKE', title: 'what is adddd.dev?', priority: 1, first: true,
+  { key: 'SITE-1', kind: 'SPIKE', title: 'learn what adddd is', priority: 1, first: true,
     prompts: ['Explain it like I have twelve seconds.', 'Just show me the loop.', 'Investigate first, then do the obvious thing.'],
     done: { summary: 'wrote the one-paragraph answer; committed README.md', files: ['README.md'], checks: 'tests ✔ · typecheck ✔ · build –',
-      body: `<p><b>adddd</b> (ADD-driven development) is a plugin for coding agents, built for brains that work best with exactly one thing in front of them.</p>
-<p>It takes a ticket from your backlog (Linear or GitHub Issues), lets you type <b>one</b> prompt, ships that prompt plus the ticket to a background worker in its own git worktree, and immediately hands you the next ticket. A worktree comes back only when it needs a human: a question, a blocker, or done and ready for review. Unlimited workers in flight. You handle one card at a time.</p>
-<p>This site works the same way. You are the operator. The content is the backlog. Nothing here was written for you to scroll through; it was written for you to dispatch.</p>
-<p class="dim">Runs in Claude Code today. The repo also ships the Agent Plugins 1.0.0 layout and a portable skill, so other hosts can pick up the workflow as they add support.</p>` } },
-  { key: 'SITE-2', kind: 'DOCS', title: 'install it', priority: 2,
+      body: `<p><b>adddd</b> (ADD-driven development) is a plugin for coding agents, built for brains that want exactly one thing in front of them.</p>
+<p>It takes a ticket from Linear or GitHub Issues and one prompt from you, and ships both to a worker in its own git worktree. The worker comes back only when it needs a human; meanwhile you get the next ticket.</p>
+<p class="dim">Runs in Claude Code today. The repo also ships the Agent Plugins 1.0.0 layout for other hosts.</p>` } },
+  { key: 'SITE-2', kind: 'DOCS', title: 'install adddd', priority: 2,
     prompts: ['Shortest possible install. Nothing optional.', 'Walk me through it, I will forget a step.', 'Just the command, I know the rest.'],
     ask: { soFar: 'read the README and the marketplace manifest; the install command is the same either way', question: 'which backlog do you use?',
       replies: ['Linear', 'GitHub Issues', 'both, it depends on the day'] },
     done: { summary: 'wrote the install steps for your backlog; committed INSTALL.md', files: ['INSTALL.md'], checks: 'tests – · typecheck – · build ✔', body: INSTALL_GITHUB,
       byReply: [INSTALL_LINEAR, INSTALL_GITHUB, INSTALL_BOTH] } },
-  { key: 'SITE-3', kind: 'FEAT', title: 'the one-prompt loop', priority: 2,
+  { key: 'SITE-3', kind: 'FEAT', title: 'walk through the one-prompt loop', priority: 2,
     prompts: ['Show me exactly what happens after I press Enter.', 'Do it the boring way. No cleverness.', 'Reproduce it, explain it, prove it.'],
+    suggest: { text: 'nothing in the backlog explains the block a worker ends its turn with.', ticket: { kind: 'DOCS', title: 'read the worker contract',
+      prompts: ['Show me the exact block a worker ends with.', 'Short. Just the fields.', 'Why a contract at all?'],
+      done: { summary: 'wrote up the status block; committed docs/contract.md', files: ['docs/contract.md'], checks: 'tests ✔ · typecheck – · build –',
+        body: `<p>Every worker ends its turn with one block, and the plugin parses that and nothing else:</p>
+<pre><code>ADDDD: done | needs-human | blocked
+summary: one line
+so-far: what it did and ruled out (needs-human, blocked)
+question: the one thing it needs from you (needs-human)
+checks: tests ✔ · typecheck ✔ · build –   (done)</code></pre>
+<p>That block decides whether a card comes back as a question, a stall, or done with a checks line.</p>` } } },
     done: { summary: 'documented the six steps of the loop; committed docs/loop.md', files: ['docs/loop.md', 'hooks/register.tsx'], checks: 'tests ✔ · typecheck ✔ · build –',
-      body: `<ol>
-<li><code>/adddd</code> picks a ticket: random, weighted toward priority. One card. Three drafted prompts under it.</li>
-<li>You press 1, 2 or 3, or type your own words and Enter. The prompt is dropped from your conversation on the way out, so the main context stays empty.</li>
-<li>A worker starts in its own git worktree on branch <code>adddd/&lt;KEY&gt;</code>. It is told which files the other workers are touching.</li>
-<li>The next ticket is in front of you before the worker has opened its first file.</li>
-<li>Cards come back: <span class="warn">needs you</span> (one question, three drafted replies), <span class="ok">done</span> (committed, a checks line, the file to start reviewing from), <span class="bad">stalled</span> (pick it up again in the same worktree).</li>
-<li>Workers never push, never open pull requests, never merge. You review; you ship.</li>
-</ol>
-<p>Every returning card starts with <i>you said:</i> and your own prompt, because by then you will have forgotten.</p>` } },
-  { key: 'SITE-4', kind: 'FEAT', title: 'squirrels and off-screen nudges', priority: 3,
+      body: `<p>Press a number or type one line. The prompt is dropped from your conversation and a worker starts on branch <code>adddd/&lt;KEY&gt;</code> in its own worktree.</p>
+<p>The next ticket is in front of you before the worker opens its first file. Cards come back as <span class="warn">needs you</span>, <span class="ok">done</span> or <span class="bad">stalled</span>, each starting with what you said.</p>
+<p>Workers never push, never open pull requests, never merge. You review; you ship.</p>` } },
+  { key: 'SITE-4', kind: 'FEAT', title: 'understand squirrels and off-screen nudges', priority: 3,
     prompts: ['Why would a focus tool hand me distractions?', 'Make it work, make it tested, commit.', 'Ship the smallest change that closes this.'],
     done: { summary: 'explained squirrels, nudges and the break guard; committed docs/squirrels.md', files: ['docs/squirrels.md', 'hooks/squirrel.ts', 'hooks/life.ts'], checks: 'tests ✔ · typecheck ✔ · build –',
-      body: `<p>Between tickets you get one 🐿️ squirrel: a real link (Hacker News, a GitHub repo, a dev.to post) on a topic read from your own repo, picked by a small model with one line on why you might care. <code>meh</code>, <code>gist</code> (three bullets on the card, no tab), <code>slack me</code>, <code>browser</code>.</p>
-<p>About one in three squirrels is 🚪 off-screen: <i>text your mom</i>. <i>get a snack, but hurry</i>. <i>refill your water</i>. <i>lie on the floor for two minutes</i>. They fit the hour. <code>did it</code> dismisses with a little fanfare; <code>never again</code> retires that nudge for good, and it stays retired across sessions.</p>
-<p>After ninety minutes without a break, the next card is an off-screen nudge that says so. A worker that needs you is never pre-empted by it; a question waiting on you is the one interruption worth keeping.</p>
-<p>The reasoning: an ADHD brain is not short on attention, it is short on <i>choice</i> about where attention goes. Giving the brain one sanctioned, small, finite distraction beats the forty unsanctioned ones it will find on its own.</p>` } },
-  { key: 'SITE-5', kind: 'RESEARCH', title: 'what the ADHD literature says', priority: 3,
+      body: `<p>Between tickets you get one 🐿️ squirrel: a real link on a topic from your own repo, with one line on why you might care. <code>next</code>, <code>gist</code>, <code>later</code>, <code>browser</code>.</p>
+<p>One in three is 🚪 off-screen: <i>text your mom</i>, <i>get a snack, but hurry</i>. <code>never again</code> retires a nudge for good, and ninety minutes without a break makes the next card one.</p>
+<p>An ADHD brain is not short on attention, it is short on choice about where it goes. One sanctioned small distraction beats forty unsanctioned ones.</p>` } },
+  { key: 'SITE-5', kind: 'RESEARCH', title: 'read what the ADHD research says', priority: 3,
     prompts: ['Only peer-reviewed sources. Cite them.', 'Summarise, then say what we changed because of it.', 'Investigate first, then do the obvious thing.'],
+    suggest: { text: 'one of the five deserves a read of its own: "Get Me In The Groove" (ICSE 2025).', ticket: { kind: 'READ', title: 'read the ICSE 2025 ADHD study',
+      prompts: ['Three bullets and the one number I should remember.', 'What did they actually measure?', 'Skip the methods, give me the findings.'],
+      done: { summary: 'read the paper, wrote three bullets; committed notes/groove.md', files: ['notes/groove.md'], checks: 'tests – · typecheck – · build –',
+        body: `<p><a href="https://people.cs.umass.edu/~mendres/papers/GetMeInTheGroove.pdf">"Get Me In The Groove"</a>, Newman et al., ICSE 2025: 99 forum threads, then a survey of 493 developers.</p>
+<p>Developers with ADHD were 1.8 to 4.4 times more likely to struggle with every challenge measured, time management most of all. What helped was external: lists, timers, and tools that take the planning off the person.</p>
+<p>The one number: <b>4.4×</b>.</p>` } } },
     done: { summary: 'read five studies, mapped each to a feature; committed docs/research.md', files: ['docs/research.md'], checks: 'tests – · typecheck – · build –',
-      body: `<ul>
-<li><a href="https://people.cs.umass.edu/~mendres/papers/GetMeInTheGroove.pdf">"Get Me In The Groove" (ICSE 2025)</a>: 99 forum threads and a survey of 493 developers. Programmers with ADHD were 1.8 to 4.4 times more likely to struggle, worst of all with time management. → the clock in the status line, the break guard.</li>
-<li><a href="https://arxiv.org/abs/2609.21254">"Two's a Crowd" (2026)</a>, fourteen engineers with ADHD on AI pairing: an agent is a judgment-free partner, but notifications drive avoidance and reviewing a pile of generated code is where the dread lives. → quiet mode (one cue, not three), the checks line, the start-here file.</li>
-<li>Clinical write-ups on re-entry: the expensive part of an interruption is rebuilding "what was I doing, what did I rule out, what is next". A next-action note before stopping is called the highest-yield change. → <i>you said</i>, <i>so far</i>, <i>while you were gone</i>, <code>/adddd eod</code>.</li>
-<li>Working-memory externalisation: capture has to cost two taps or it will not happen. → <code>/adddd idea</code> files a ticket without leaving your card.</li>
-<li>Gamification evidence: streaks and loss-aversion fade within months and breed guilt; small immediate rewards are fine. → no streaks, ever. One fanfare on <i>did it</i>.</li>
-<li>Rejection sensitivity and self-criticism ("always my own hardest critic"). → cards say <i>stalled</i> and <i>park it</i>, never failed and give up.</li>
-</ul>` } },
-  { key: 'SITE-6', kind: 'DOCS', title: 'commands cheat sheet', priority: 4,
+      body: `<p><a href="https://people.cs.umass.edu/~mendres/papers/GetMeInTheGroove.pdf">ICSE 2025</a>: programmers with ADHD were 1.8 to 4.4× more likely to struggle, worst at time management. So: the clock in the status line and the break guard.</p>
+<p><a href="https://arxiv.org/abs/2609.21254">"Two's a Crowd"</a>: notifications drive avoidance, and reviewing piles of generated code is where the dread lives. So: quiet mode, the checks line, the start-here file.</p>
+<p>Re-entry is the expensive part of an interruption, and capture must cost two taps. So: <i>you said</i>, <i>so far</i>, <code>/adddd idea</code>, and never a streak.</p>` } },
+  { key: 'SITE-6', kind: 'DOCS', title: 'get the commands cheat sheet', priority: 4,
     prompts: ['A table. Nothing else.', 'Group them by when I would use them.', 'Just fix it. Small diff, a test, a commit.'],
     done: { summary: 'tabulated every verb; committed docs/commands.md', files: ['docs/commands.md'], checks: 'tests ✔ · typecheck ✔ · build –',
       body: `<div class="tablewrap"><table>
 <tr><th>command</th><th>what it does</th></tr>
-<tr><td><code>/adddd</code></td><td>pick a ticket and wait for your one prompt</td></tr>
-<tr><td><code>/adddd next</code> · <code>pause</code> · <code>resume</code></td><td>skip the pick · stop picking · start again</td></tr>
+<tr><td><code>/adddd</code></td><td>pick a ticket, wait for your one prompt</td></tr>
 <tr><td><code>/adddd ok [KEY|all]</code></td><td>reviewed; free the slot</td></tr>
-<tr><td><code>/adddd reply KEY …</code> · <code>view KEY</code> · <code>back</code></td><td>answer a worker · open its transcript · return</td></tr>
-<tr><td><code>/adddd review KEY</code> · <code>retry KEY</code> · <code>dismiss KEY</code> · <code>cleanup</code></td><td>commits and files · run again · park · remove clean worktrees</td></tr>
-<tr><td><code>/adddd meh</code> · <code>gist</code> · <code>slack</code> · <code>browser</code></td><td>the squirrel in front of you</td></tr>
-<tr><td><code>/adddd did</code> · <code>never</code></td><td>the off-screen nudge in front of you</td></tr>
-<tr><td><code>/adddd idea …</code> · <code>later</code></td><td>file a ticket from any card · file the squirrel</td></tr>
-<tr><td><code>/adddd standup</code> · <code>eod</code></td><td>three lines on yesterday / today / blocked · stop for the day</td></tr>
-<tr><td><code>/adddd status</code> · <code>pane</code> · <code>source</code></td><td>the board as text · the board as a pane · linear or github</td></tr>
+<tr><td><code>/adddd reply KEY …</code> · <code>view KEY</code></td><td>answer a worker · open its transcript</td></tr>
+<tr><td><code>/adddd next</code> · <code>gist</code> · <code>later</code> · <code>browser</code></td><td>the squirrel in front of you</td></tr>
+<tr><td><code>/adddd idea …</code> · <code>standup</code> · <code>eod</code></td><td>file a ticket · three lines on yesterday · stop for the day</td></tr>
+<tr><td><code>/adddd status</code> · <code>pane</code> · <code>source</code></td><td>the board · as a pane · linear or github</td></tr>
 </table></div>` } },
-  { key: 'SITE-7', kind: 'CHORE', title: 'the cap, standup and end of day', priority: 4,
+  { key: 'SITE-7', kind: 'CHORE', title: 'learn the cap, standup and end of day', priority: 4,
     prompts: ['Why six? Convince me.', 'Do it the boring way. No cleverness.', 'Make it work, make it tested, commit.'],
     done: { summary: 'wrote up the cap and the two rituals; committed docs/rituals.md', files: ['docs/rituals.md'], checks: 'tests ✔ · typecheck ✔ · build –',
-      body: `<p><b>Six worktrees, then stop.</b> Running, waiting on you, and done-but-unreviewed all count. Review is the way to earn a new ticket, which keeps the review pile from becoming the thing you avoid. At the cap with nothing needing you, you get squirrels until something does. Set <code>maxInFlight</code> to taste; 0 is unlimited, which you will regret by Thursday.</p>
-<p><b><code>/adddd standup</code></b> drafts three lines (yesterday, today, blocked) from the board and your branches' commits, and copies them. Recalling yesterday is a working-memory task; the board remembers so you do not have to.</p>
-<p><b><code>/adddd eod</code></b> lists what is open and writes a "tomorrow, start here" note. It is the first thing you see next session, once, and then it is gone.</p>` } },
-  { key: 'SITE-8', kind: 'BUG', title: 'will it push my code somewhere?', priority: 3,
+      body: `<p><b>Six worktrees, then stop.</b> Running, waiting and done-but-unreviewed all count, so review is how you earn the next ticket.</p>
+<p><code>/adddd standup</code> drafts yesterday, today and blocked from the board and your commits, and copies it.</p>
+<p><code>/adddd eod</code> writes a "tomorrow, start here" note. You see it once next session, then it is gone.</p>` } },
+  { key: 'SITE-8', kind: 'BUG', title: 'check whether it pushes my code anywhere', priority: 3,
     prompts: ['Reproduce it, fix it, prove it with a test.', 'List every network call it makes.', 'Just answer the question.'],
+    suggest: { text: 'the squirrel hunt talks to three public APIs and nobody wrote down what goes out.', ticket: { kind: 'DOCS', title: 'list what the squirrel hunt sends out',
+      prompts: ['Every host, every call, what goes out.', 'Just the list.', 'Is anything of mine sent anywhere?'],
+      done: { summary: 'listed the three calls and what they carry; committed docs/squirrel-privacy.md', files: ['docs/squirrel-privacy.md'], checks: 'tests – · typecheck – · build –',
+        body: `<p>Hacker News search, dev.to and GitHub search each get the topic string and nothing else.</p>
+<p>Topics are a few words a small model picks from your README and manifest. No file contents, diffs or ticket text leave the machine for a squirrel.</p>` } } },
     done: { summary: 'could not reproduce: nothing pushes; listed every network call in SECURITY.md', files: ['SECURITY.md'], checks: 'tests ✔ · typecheck ✔ · build –',
-      body: `<p><b>No.</b> Workers commit on their branch and stop. There is no push, no pull request, no merge, and no code path that could do any of those. You review the branch and ship it however you ship things.</p>
-<p>What it does talk to: your backlog (the <code>gh</code> CLI, or Linear's MCP server through your agent's own sign-in); Hacker News, GitHub search and dev.to for squirrels, read-only; Slack only if you paste a token or webhook; and your agent's model, through your own login, for drafted prompts and the one-line "why you might care". No telemetry, no server of mine. MIT licensed; the source is one <code>git clone</code> away.</p>` } },
-  { key: 'SITE-9', kind: 'SPIKE', title: 'who made this', priority: 4,
+      body: `<p><b>No.</b> Workers commit on their branch and stop. There is no push, no pull request, no merge, and no code path for any of them.</p>
+<p>It talks to your backlog, to three public sites for squirrels, and to your agent's model through your own login. No telemetry, no server of mine.</p>` } },
+  { key: 'SITE-9', kind: 'SPIKE', title: 'find out who made this', priority: 4,
     prompts: ['Keep it to three lines.', 'Investigate first, then do the obvious thing.', 'Credits, then get out.'],
     done: { summary: 'wrote the colophon; committed AUTHORS', files: ['AUTHORS', 'LICENSE'], checks: 'tests – · typecheck – · build –',
-      body: `<p>Michael Phillips (<a href="https://github.com/heymichaelp">heymichaelp</a>), who has ADD and wanted a tool that works with it instead of around it. Built with a coding agent, in one long afternoon of ADD-driven development, naturally.</p>
-<p>MIT. Source, issues and the research notes at <a href="https://github.com/heymichaelp/adddd">github.com/heymichaelp/adddd</a>.</p>` } },
+      body: `<p>Michael Phillips (<a href="https://github.com/heymichaelp">heymichaelp</a>), who has ADD and wanted a tool that works with it instead of around it. Built with a coding agent, in one long afternoon of ADD-driven development.</p>
+<p>MIT. Source, issues and research notes at <a href="https://github.com/heymichaelp/adddd">github.com/heymichaelp/adddd</a>.</p>` } },
 ];
 
 const FALLBACK_SQUIRRELS = [
@@ -365,6 +452,22 @@ const SITE_BREAK_MS = 8 * 60000;   // a web visit is short: nudge after eight mi
 const SNOOZE_MS = 5 * 60000;
 
 function timeOfDay(h) { return h >= 5 && h < 11 ? 'morning' : h >= 11 && h < 17 ? 'day' : h >= 17 && h < 22 ? 'evening' : 'late'; }
+/** the sash stands in for a real tracker; the wording and keys follow which one */
+const SOURCES = {
+  linear: { name: 'Linear', key: t => t.key, state: 'Backlog', card: t => `<span class="dim"><span class="bars">${'▮'.repeat(5 - t.priority)}${'▯'.repeat(t.priority - 1)}</span> ${PRIO[t.priority]} · ${t.kind.toLowerCase()} · Backlog</span>`, onDispatch: k => `${k} moved to In Progress in Linear`, onDone: k => `${k} moved to In Review in Linear`, onFile: k => `${k} created in Linear` },
+  github: { name: 'GitHub Issues', key: t => '#' + t.key.split('-')[1], state: 'open', card: t => `<span class="dim"><span class="pill">${t.kind.toLowerCase()}</span><span class="pill">P${t.priority}</span></span>`, onDispatch: k => `${k} labeled adddd:in-progress`, onDone: k => `${k} relabeled adddd:review`, onFile: k => `${k} opened as an issue` },
+};
+let source = 'linear';
+try { if (localStorage.getItem('adddd.source') === 'github') source = 'github'; } catch (e) { /* fine */ }
+const src = () => SOURCES[source];
+document.documentElement.dataset.tracker = source;
+function setSource(name) {
+  source = name in SOURCES ? name : 'linear';
+  document.documentElement.dataset.tracker = source;
+  try { localStorage.setItem('adddd.source', source); } catch (e) { /* fine */ }
+  toast(`the sash is now standing in for ${src().name}. in the real plugin that is /adddd source ${source}.`);
+  render();
+}
 function readList(k) { try { const v = JSON.parse(localStorage.getItem(k) || '[]'); return Array.isArray(v) ? v : []; } catch (e) { return []; } }
 function writeList(k, v) { try { localStorage.setItem(k, JSON.stringify(v.slice(-300))); } catch (e) { /* fine */ } }
 function pickNudge(blurb) {
@@ -442,7 +545,6 @@ const el = (tag, cls, html) => { const n = document.createElement(tag); if (cls)
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const rand = (a, b) => a + Math.random() * (b - a);
 const PRIO = ['', 'urgent', 'high', 'medium', 'low'];
-const WEIGHT = { 1: 8, 2: 4, 3: 2, 4: 1 };
 const ago = (from, now) => { const s = Math.max(0, Math.round((now - from) / 1000)); if (s < 60) return s + 's'; const m = Math.round(s / 60); return m < 60 ? m + 'm' : Math.round(m / 60) + 'h'; };
 const elapsed = (from, now) => { const m = Math.floor((now - from) / 60000); return m < 60 ? m + 'm' : Math.floor(m / 60) + 'h' + String(m % 60).padStart(2, '0') + 'm'; };
 
@@ -467,6 +569,9 @@ function beep(kind) {
 
 // ---------- the one card in front of you ----------
 function nowCard() {
+  if (S.chosen && S.picked) return { kind: 'ticket', t: S.picked };
+  if (S.holdSquirrel && S.squirrel) return { kind: 'squirrel', s: S.squirrel };
+  if (S.front && (S.front.status === 'needs-human' || S.front.status === 'done')) return { kind: 'worker', w: S.front };
   const human = S.workers.filter(w => w.status === 'needs-human').sort((a, b) => a.updatedAt - b.updatedAt)[0]
     || S.workers.filter(w => w.status === 'done').sort((a, b) => a.updatedAt - b.updatedAt)[0];
   if (human) return { kind: 'worker', w: human };
@@ -474,49 +579,52 @@ function nowCard() {
   if (S.picked) return { kind: 'ticket', t: S.picked };
   return { kind: 'idle' };
 }
-function pickNext() {
-  if (S.backlog.length === 0) { S.picked = null; return null; }
-  const first = S.backlog.find(t => t.first);
-  let t;
-  if (first) t = first;
-  else {
-    const total = S.backlog.reduce((n, x) => n + (WEIGHT[x.priority] || 1), 0);
-    let r = Math.random() * total;
-    t = S.backlog[S.backlog.length - 1];
-    for (const x of S.backlog) { r -= WEIGHT[x.priority] || 1; if (r <= 0) { t = x; break; } }
-  }
-  S.picked = t;
+/** the top of the backlog: the flagged first ticket, else the most urgent one */
+/** files a new ticket into the backlog: from a worker's suggestion, a squirrel, or an idea typed at the prompt */
+S.nextKey = 10;
+function fileTicket(spec, from) {
+  const t = { key: `SITE-${S.nextKey++}`, priority: 3, fresh: true, ...spec };
+  S.backlog.unshift(t);
+  beep('dispatch');
+  toast(`💡 ${src().onFile(src().key(t))} · ${t.title} · it is in the backlog now, front of the sash${from ? ` · ${from}` : ''}`);
+  setTimeout(() => { t.fresh = false; renderSash(); }, 5000);
+  render();
   return t;
+}
+const slugOf = str => str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) || 'note';
+function topTicket(skip) {
+  const pool = S.backlog.filter(t => t !== skip);
+  if (pool.length === 0) return null;
+  return pool.find(t => t.first) || pool.slice().sort((a, b) => a.priority - b.priority)[0];
 }
 function dispatch(t, prompt) {
   S.backlog = S.backlog.filter(x => x !== t);
-  S.picked = null;
+  S.picked = null; S.chosen = false;
   S.dispatches += 1;
   document.querySelector('.dock').classList.add('started');
   const w = { t, prompt, status: 'running', dispatchedAt: Date.now(), updatedAt: Date.now(), reply: -1 };
   S.workers.push(w);
   beep('dispatch');
-  const delay = t.ask ? rand(3500, 6000) : rand(4000, 11000);
+  const delay = S.demo ? rand(3200, 4200) : t.ask ? rand(3500, 6000) : rand(4000, 11000);
   setTimeout(() => comeBack(w), delay);
-  const next = pickNext();
   if (S.dispatches === 2 || S.dispatches === 5 || S.dispatches === 8) { if (pantry) { S.squirrelQueue.push(pantry); pantry = null; } restock(); }
   if (S.dispatches === 3 || S.dispatches === 7) { const n = pickNudge(); if (n) S.squirrelQueue.push(n); }
   serveSquirrel();
   const inflight = S.workers.filter(x => x.status === 'running').length;
   const shiny = S.squirrel ? (S.squirrel.kind === 'life' ? '🚪 nothing is waiting on you' : '🐿️ squirrel') : '';
-  const upNext = next ? `NEXT ▶ ${next.key} · ${esc(next.title)} · type ONE prompt` : 'the backlog is empty 🎉';
-  log(prompt, segs(`🎯 ${t.key} shipped to adddd/${t.key} · ${inflight} in flight · it comes back only when it needs you`, shiny, upNext));
+  const upNext = S.backlog.length ? `NEXT ▶ tap another card above · ${S.backlog.length} left` : 'the backlog is empty 🎉';
+  log(prompt, segs(`🎯 ${t.key} shipped to adddd/${t.key} · ${src().onDispatch(src().key(t))} · ${inflight} in flight · it comes back only when it needs you`, shiny, upNext));
 }
 function comeBack(w) {
   w.updatedAt = Date.now();
   if (w.t.ask && w.reply < 0) { w.status = 'needs-human'; beep('resurface'); toast(`🔔 ${w.t.key} needs you: ${w.t.ask.question}`); }
-  else { w.status = 'done'; beep('done'); toast(`✅ ${w.t.key} done (${w.t.done.checks}): ${w.t.done.summary}`); }
+  else { w.status = 'done'; beep('done'); toast(`✅ ${w.t.key} done (${w.t.done.checks}): ${w.t.done.summary} · ${src().onDone(src().key(w.t))}`); }
   render();
 }
 function answer(w, i, text) {
   w.reply = i; w.replyText = text; w.status = 'running'; w.updatedAt = Date.now();
   log(text, `↩ sent to ${w.t.key} · it resumes in its worktree`);
-  setTimeout(() => comeBack(w), rand(2500, 5000));
+  setTimeout(() => comeBack(w), S.demo ? rand(2600, 3400) : rand(2500, 5000));
   render();
 }
 const bodyOf = w => (w.t.done.byReply && w.reply >= 0 ? w.t.done.byReply[w.reply] : w.t.done.body);
@@ -528,11 +636,12 @@ function review(w) {
   node.id = 'r-' + w.t.key;
   node.innerHTML = `<h3><span class="ok">✔</span> ${w.t.key} · ${w.t.kind}: ${esc(w.t.title)}</h3>
 <div class="meta">you said: "${esc(w.prompt)}"${w.replyText ? ` · you answered: "${esc(w.replyText)}"` : ''} · ${w.t.done.files.join(', ')} · ${w.t.done.checks}</div>${body}`;
-  if (!S.picked) pickNext();
   render();
-  feed(node, true);
+  feed(node);
   if (!phone()) node.scrollIntoView({ block: 'start', behavior: 'smooth' });
   node.classList.add('flash'); setTimeout(() => node.classList.remove('flash'), 2500);
+  const next = topTicket();
+  if (next) setTimeout(() => pick(next), 300);
 }
 function serveSquirrel() { if (!S.squirrel && S.squirrelQueue.length) S.squirrel = S.squirrelQueue.shift(); }
 function dismissSquirrel(line) {
@@ -541,7 +650,7 @@ function dismissSquirrel(line) {
   markSeen(s.kind === 'life' ? 'life:' + s.slug : s.url);
   if (S.guardId && s.kind === 'life' && s.slug === S.guardId) { S.guardId = null; S.snoozedUntil = Date.now() + SNOOZE_MS; }
   if (line) toast(line);
-  S.squirrel = null; serveSquirrel(); render();
+  S.squirrel = null; S.holdSquirrel = false; serveSquirrel(); render();
 }
 /** the break guard: eight minutes on the page without a break, and the next quiet moment is a nudge off-screen */
 function guardBreak() {
@@ -558,17 +667,29 @@ function guardBreak() {
 /** on a phone the card sits at the top and the feed runs newest-first under it; on a desktop it is a terminal with scrollback */
 const PHONE = window.matchMedia('(max-width: 860px), (orientation: portrait) and (max-width: 1100px)');
 const phone = () => PHONE.matches;
-function feed(node, toNode) {
+function feed(node) {
   const sc = $('scroll');
-  if (phone()) { sc.prepend(node); if (toNode) node.scrollIntoView({ block: 'start', behavior: 'smooth' }); else window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  else { sc.appendChild(node); sc.scrollTop = sc.scrollHeight; }
+  sc.appendChild(node);
+  if (phone()) reveal(node);
+  else sc.scrollTop = sc.scrollHeight;
 }
-let toastTimer = null;
+/** phones: follow new content to the bottom of the page, unless it is taller than the screen, then show its start */
+let revealTimer = null, revealNode = null;
+function reveal(node) {
+  if (node) revealNode = node;
+  clearTimeout(revealTimer);
+  revealTimer = setTimeout(() => {
+    const target = revealNode; revealNode = null;
+    const room = window.innerHeight - ($('tray').offsetHeight || 0) - ($('topbar').offsetHeight || 0) - 40;
+    if (target && target.isConnected && target.offsetHeight > room) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' });
+  }, 120);
+}
+/** the plugin talks in the chat, not in pop-ups: one dim line in the feed */
 function toast(text) {
-  let t = document.querySelector('.toast');
-  if (!t) { t = el('div', 'toast'); t.addEventListener('click', () => { t.remove(); window.scrollTo({ top: 0, behavior: 'smooth' }); }); document.body.appendChild(t); }
-  t.textContent = text;
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.remove(), 6000);
+  const e = el('div', 'say');
+  e.textContent = text;
+  feed(e);
 }
 const segs = (...parts) => parts.filter(Boolean).map(x => `<span class="seg">${x}</span>`).join('');
 function log(cmd, drop) {
@@ -576,7 +697,7 @@ function log(cmd, drop) {
   e.innerHTML = `<div class="cmd">${esc(cmd)}</div><div class="drop">${drop}</div>`;
   feed(e);
 }
-function key(n, label, full) { return `<button type="button" data-key="${n}" class="${full ? 'full' : ''}"><b>${n}:</b> ${label}</button>`; }
+function key(n, label, full) { return `<button type="button" data-key="${n}" class="${full ? 'full' : ''}"><b>${n}</b> ${label}</button>`; }
 function statusLine() {
   const now = Date.now();
   const running = S.workers.filter(w => w.status === 'running').length;
@@ -590,6 +711,7 @@ function statusLine() {
   if (now - S.startedAt >= 60000) bits.push(`${elapsed(S.startedAt, now)} at it`);
   return 'adddd · ' + bits.join(' · ');
 }
+let lastCardId = null;
 function render() {
   const card = nowCard();
   const now = Date.now();
@@ -597,8 +719,24 @@ function render() {
   const input = $('input');
   let html = '<div class="now">NOW</div>';
   let placeholder = '';
+  band.hidden = false;
   if (card.kind === 'idle') {
-    if (S.backlog.length === 0 && S.workers.every(w => w.status === 'dismissed')) {
+    if (S.backlog.length && !S.picked && !S.demo && S.dispatches === 0 && !S.chose) {
+      html += `<div class="card"><div class="dim">first time here? pick one:</div>
+<div class="keys col">${key(1, 'watch it drive itself · a typical few minutes, sped up', true)}${key(2, 'drive it yourself', true)}</div>
+<div class="keys">${key(0, 'read it plain')}</div></div>`;
+      placeholder = phone() ? 'or type your own prompt' : 'or type a prompt and the top ticket ships with it';
+    } else if (S.demo) {
+      html += `<div class="card"><div class="dim">🎬 the demo is driving. tap anything, press any key, or type to take over.</div>
+<div class="keys">${key(1, 'stop the demo')}</div></div>`;
+      placeholder = 'type anything to take over';
+    } else if (S.backlog.length && !S.picked) {
+      html += `<div class="card"><div class="dim">nothing in front of you.</div>
+<div class="keys col">${key(1, '/adddd · pick the next ticket', true)}</div>
+<div class="dim"><span class="kbd">press 1 or type /adddd. a ticket comes up with three drafted prompts.</span><span class="tap">tap it or type /adddd. a ticket comes up with three drafted prompts.</span> "/adddd idea …" files a new ticket from anywhere.</div>
+<div class="keys">${key(0, 'read it plain')}</div></div>`;
+      placeholder = '/adddd';
+    } else if (S.backlog.length === 0 && S.workers.every(w => w.status === 'dismissed')) {
       html += `<div class="card"><div class="head">🎉 backlog empty. nothing in front of you.</div><div class="dim">that is the whole idea. everything you reviewed is above; the real thing is one command away.</div>
 <div class="keys">${key(1, 'copy the install command')}${key(2, 'open the GitHub repo')}${key(3, 'read it plain')}</div></div>`;
       placeholder = phone() ? 'tap one' : 'press a number';
@@ -620,13 +758,13 @@ function render() {
       const busy = S.workers.filter(w => w.status === 'running').length;
       html += `<div class="card"><div class="head"><span class="accent">🚪 OFF-SCREEN</span> <span class="dim">· ${s.blurb ? esc(s.blurb) : busy ? `${busy} worker${busy === 1 ? ' is' : 's are'} busy. you are not.` : 'nothing is waiting on you.'}</span></div>
 <div class="b">${esc(s.title)}</div><div class="accent">${esc(s.why)}</div>
-<div class="keys grid">${key(1, 'meh')}${key(2, 'did it')}${key(3, 'slack me')}${key(4, 'never again')}</div></div>`;
+<div class="keys grid">${key(1, 'next')}${key(2, 'did it')}${key(3, 'slack me')}${key(4, 'never again')}</div></div>`;
     } else {
       html += `<div class="card"><div class="head"><span class="info">🐿️ SQUIRREL</span> <span class="dim">· ${s.source} · ${s.topic}</span></div>
 <div class="b">${esc(s.title)}</div><div class="dim">${esc(s.blurb)}</div><div class="info">${esc(s.why)}</div>
 ${s.showGist ? s.gist.map(g => `<div>  • ${esc(g)}</div>`).join('') : ''}${s.note ? `<div class="ok">${esc(s.note)}</div>` : ''}
 <div class="dim"><a href="${s.url}">${s.url}</a></div>
-<div class="keys grid">${key(1, 'meh')}${key(2, 'gist')}${key(3, 'slack me')}${key(4, 'browser')}</div></div>`;
+<div class="keys grid">${key(1, 'next')}${key(2, 'gist')}${key(3, 'later: ticket it')}${key(4, 'browser')}</div></div>`;
     }
     placeholder = phone() ? 'or type a prompt to skip to the next ticket' : 'or type a prompt to skip straight to the next ticket';
   } else {
@@ -647,16 +785,78 @@ ${s.showGist ? s.gist.map(g => `<div>  • ${esc(g)}</div>`).join('') : ''}${s.n
 <div class="ok">checks: ${esc(d.checks)}</div>
 <div class="dim">start here: ${d.files[0]} · ${d.files.length} file${d.files.length === 1 ? '' : 's'} · 1 commit</div>
 <div class="reviewed">${bodyOf(w)}</div>
-<div class="keys">${key(1, 'ok, next')}</div>
-<div class="dim"><span class="kbd">read it, then press 1 to free the slot. or type a follow-up and Enter.</span><span class="tap">read it, then tap ok to free the slot. or type a follow-up below.</span></div></div>`;
+${w.t.suggest ? (w.filed ? `<div class="ok">💡 filed ${w.filed} · ${esc(w.t.suggest.ticket.title)} · it is in the backlog now</div>` : `<div class="suggest">💡 the worker also found: ${esc(w.t.suggest.text)} want a ticket for it?</div>`) : ''}
+<div class="keys${w.t.suggest && !w.filed ? ' grid' : ''}">${key(1, 'ok, next')}${w.t.suggest && !w.filed ? key(2, `file it: ${esc(w.t.suggest.ticket.title)}`) : ''}</div>
+<div class="dim"><span class="kbd">read it, then press 1: the slot frees and the next ticket ships. or type a follow-up and Enter.</span><span class="tap">read it, then tap ok: the slot frees and the next ticket ships. or type a follow-up below.</span></div></div>`;
       placeholder = phone() ? 'or type a follow-up' : 'press 1 when you have read it, or type a follow-up';
     }
   }
   html += `<div class="status">${statusLine()}</div>`;
   band.innerHTML = html;
   input.placeholder = placeholder;
+  const cardId = card.kind + ':' + (card.t?.key || card.w?.t.key || card.s?.url || card.s?.slug || '') + ':' + (card.w?.status || '');
+  if (cardId !== lastCardId && !band.hidden && phone() && lastCardId !== null) reveal(band);
+  lastCardId = cardId;
   band.querySelectorAll('button[data-key]').forEach(b => b.addEventListener('click', () => press(b.dataset.key)));
+  renderSash();
+  renderAgents(now);
   renderPane(now);
+}
+/** the workers, as chips under the prompt: what is running, what is waiting on you, how long */
+function renderAgents(now) {
+  const box = $('agents');
+  const live = S.workers.filter(w => w.status !== 'dismissed');
+  box.hidden = false;
+  const keepX = box.scrollLeft;
+  if (!live.length) box.innerHTML = `<span class="lbl">in flight</span><span class="dim">· nothing yet</span>`;
+  if (live.length) {
+    const chip = w => w.status === 'running' ? `<button type="button" class="run" data-agent="${w.t.key}">◐ ${w.t.key} · ${ago(w.dispatchedAt, now)}</button>`
+      : w.status === 'needs-human' ? `<button type="button" class="warn" data-agent="${w.t.key}">❓ ${w.t.key} · needs you</button>`
+      : `<button type="button" class="ok" data-agent="${w.t.key}">✅ ${w.t.key} · done</button>`;
+    const order = { 'needs-human': 0, done: 1, running: 2 };
+    box.innerHTML = `<span class="lbl">in flight</span>` + live.slice().sort((a, b) => order[a.status] - order[b.status]).map(chip).join('');
+    box.querySelectorAll('[data-agent]').forEach(b => b.addEventListener('click', () => {
+      const w = S.workers.find(x => x.t.key === b.dataset.agent); if (!w) return;
+      if (w.status === 'running') { toast(`◐ ${w.t.key} is still at it (${ago(w.dispatchedAt, Date.now())}). it comes back when it needs you.`); return; }
+      S.front = w; S.chosen = false; render();
+      if (phone()) reveal($('band'));
+    }));
+  }
+  box.scrollLeft = keepX;
+  document.documentElement.style.setProperty('--top-h', $('topbar').offsetHeight + 'px');
+}
+/** the backlog as a row of cards under the header; tapping one puts it in front of you with its first prompt filled in */
+let sashPicked = null;
+function renderSash() {
+  const sash = $('sash');
+  const other = source === 'linear' ? 'github' : 'linear';
+  const label = `<div class="sash-label">BACKLOG <span class="dim">· standing in for</span> <button type="button" class="srcBtn" data-src="${other}" title="switch to ${SOURCES[other].name}">${src().name} ⇄</button> <span class="dim">· ${S.backlog.length ? `${S.backlog.length} · what /adddd picks from` : 'empty 🎉'}</span></div>`;
+  if (!S.backlog.length) { sash.innerHTML = label; sash.querySelector('.srcBtn').addEventListener('click', () => setSource(other)); return; }
+  const prevRow = sash.querySelector('.sash-row');
+  const keepX = prevRow ? prevRow.scrollLeft : 0;
+  sash.innerHTML = label + `<div class="sash-row">` +
+    S.backlog.map(t => `<div class="tcard${S.picked === t ? ' picked' : ''}${t.fresh ? ' fresh' : ''}" data-key-of="${t.key}"><span class="k">${src().key(t)}</span>${src().card(t)}<span class="t">${esc(t.title)}</span></div>`).join('') + '</div>';
+  sash.querySelector('.srcBtn').addEventListener('click', () => setSource(other));
+  const row = sash.querySelector('.sash-row');
+  row.scrollLeft = keepX;
+  const picked = sash.querySelector('.picked');
+  if (picked && sashPicked !== S.picked) {
+    const left = picked.offsetLeft, right = left + picked.offsetWidth;
+    if (left < row.scrollLeft || right > row.scrollLeft + row.clientWidth) row.scrollTo({ left: Math.max(0, left - 8), behavior: 'smooth' });
+  }
+  sashPicked = S.picked;
+}
+let picking = false;
+function pick(t) {
+  if (picking || !t || !S.backlog.includes(t)) return;
+  picking = true;
+  S.picked = t; S.chosen = true;
+  if (S.squirrel) { S.squirrelQueue.unshift(S.squirrel); S.squirrel = null; }
+  render();
+  const input = $('input');
+  if (phone()) { picking = false; dispatch(t, t.prompts[0]); render(); return; }
+  input.value = t.prompts[0];
+  setTimeout(() => { picking = false; if (nowCard().t !== t) return; input.value = ''; dispatch(t, t.prompts[0]); render(); }, 450);
 }
 function renderPane(now) {
   const running = S.workers.filter(w => w.status === 'running');
@@ -695,22 +895,146 @@ function setBoard(open) {
 $('boardBtn').addEventListener('click', () => setBoard(!S.boardOpen));
 $('scrim').addEventListener('click', () => setBoard(false));
 
+// ---------- host skins: how the plugin would look inside each coding agent ----------
+const AGENTS = { claude: 'Claude Code', codex: 'Codex', gemini: 'Gemini CLI' };
+let agent = 'claude';
+try { const a = localStorage.getItem('adddd.agent'); if (a && a in AGENTS) agent = a; } catch (e) { /* fine */ }
+function paintAgent() { document.documentElement.dataset.agent = agent; $('agentBtn').textContent = `${phone() ? '' : 'in '}${AGENTS[agent]} ⇄`; }
+function setAgent(name) {
+  agent = name in AGENTS ? name : 'claude';
+  try { localStorage.setItem('adddd.agent', agent); } catch (e) { /* fine */ }
+  paintAgent();
+  toast(agent === 'claude' ? 'styled like Claude Code, where the plugin runs today.' : `styled like ${AGENTS[agent]}: an approximation of how the plugin would feel there. the Agent Plugins layout in the repo is what another host would pick up.`);
+}
+$('agentBtn').addEventListener('click', () => { const keys = Object.keys(AGENTS); setAgent(keys[(keys.indexOf(agent) + 1) % keys.length]); });
+paintAgent();
+
+// ---------- the demo: a typical few minutes, narrated, driving the real controls ----------
+let demoRun = 0;
+const pause = ms => new Promise(r => setTimeout(r, ms));
+function narrate(text) { const e = el('div', 'say demo'); e.textContent = text; feed(e); }
+async function until(cond, ms) { const t0 = Date.now(); while (!cond()) { if (!S.demo || Date.now() - t0 > ms) return false; await pause(150); } return true; }
+function stopDemo(why) {
+  if (!S.demo) return;
+  S.demo = false; S.chose = true; S.holdSquirrel = false;
+  ptr.classList.remove('show'); cap.classList.remove('show');
+  narrate(`demo over: ${why} the sash is yours.`);
+  render();
+}
+// a pointer dot that glides to what the demo is about to tap, and a keycap for the keys it presses
+const ptr = el('div', 'pointer'); const cap = el('div', 'keycap');
+document.body.append(ptr, cap);
+async function glide(target) {
+  if (!target) return;
+  const r = target.getBoundingClientRect();
+  ptr.style.left = `${r.left + Math.min(r.width / 2, 72)}px`;
+  ptr.style.top = `${r.top + r.height / 2}px`;
+  clearTimeout(ptrHide);
+  ptr.classList.add('show');
+  await pause(800);
+  ptr.classList.add('tap'); await pause(420); ptr.classList.remove('tap');
+  ptrHide = setTimeout(() => ptr.classList.remove('show'), 1400);
+}
+let ptrHide = null;
+async function keycap(label, ms = 1100) {
+  cap.textContent = label;
+  cap.style.bottom = `${($('tray').offsetHeight || 100) + 20}px`;
+  cap.classList.add('show');
+  await pause(ms);
+  cap.classList.remove('show');
+}
+async function startDemo() {
+  if (S.demo) return;
+  S.demo = true; S.chose = true; render();
+  const run = ++demoRun;
+  const live = () => S.demo && demoRun === run;
+  const step = async (text, ms = 3000) => { if (!live()) return false; narrate(text); render(); await pause(ms); return live(); };
+  const pressKey = async n => {
+    const b = document.querySelector(`.band [data-key="${n}"]`);
+    if (b && phone()) { b.scrollIntoView({ block: 'center', behavior: 'smooth' }); await pause(500); }
+    const show = keycap(String(n));
+    await glide(b); if (!live()) return;
+    press(String(n)); render();
+    await show;
+  };
+  const typeIn = async text => {
+    const input = $('input');
+    await glide(input); if (!live()) return;
+    input.value = '';
+    for (const ch of text) { input.value += ch; await pause(38); if (!live()) return; }
+    await pause(500);
+    await keycap('⏎', 700);
+    input.value = '';
+    submit(text); render();
+  };
+  if (!await step('a typical few minutes with adddd, a little sped up. tap anything to take over.')) return;
+  // 1. /adddd picks a ticket; a number sends a drafted prompt
+  if (!await step('you type /adddd. the plugin picks a ticket from your backlog and drafts three prompts for it.')) return;
+  await typeIn('/adddd'); if (!live()) return;
+  if (!await step('one card, three drafted prompts. you press 1 and it ships to a worker in its own worktree. you get on with your day.', 3200)) return;
+  await pressKey(1); if (!live()) return;
+  if (!await step('nothing is in front of you now. the chip under the prompt is the worker, still at it.')) return;
+  // 2. a second one, with your own words
+  if (!await step('you do not wait for it. /adddd again, and this time you type your own prompt.', 2400)) return;
+  await typeIn('/adddd'); if (!live()) return;
+  await pause(1200); if (!live()) return;
+  await typeIn('Shortest install possible. I will forget a step.'); if (!live()) return;
+  // 3. first one comes back done
+  if (!await until(() => S.workers.some(w => w.status === 'done'), 12000)) return;
+  if (!await step('the first one came back done: what you said, what it did, a checks line, the file to start at, and the content on the card.', 3600)) return;
+  S.front = S.workers.find(w => w.status === 'done'); render();
+  if (!await step('you read it, then press 1: ok, next. the slot frees and the next ticket ships by itself.', 2400)) return;
+  await pressKey(1); if (!live()) return;
+  // 4. the question
+  if (!await until(() => S.workers.some(w => w.status === 'needs-human'), 12000)) return;
+  S.front = S.workers.find(w => w.status === 'needs-human'); render();
+  if (!await step('a worker has one question. three drafted replies, or type your own. press 2.', 3000)) return;
+  await pressKey(2); if (!live()) return;
+  // 5. a squirrel
+  if (!S.squirrel || S.squirrel.kind === 'life') { if (pantry) { S.squirrel = pantry; pantry = null; } else { const f = FALLBACK_SQUIRRELS[Math.floor(Math.random() * FALLBACK_SQUIRRELS.length)]; S.squirrel = { kind: 'link', ...f }; } }
+  S.holdSquirrel = true; render();
+  if (!await step('between tickets: a squirrel, a real link from the web on a topic from your repo. press 3: later, and it becomes a ticket in the backlog.', 3600)) return;
+  await pressKey(3); if (!live()) return;
+  // 6. a worker found something
+  if (!await until(() => S.workers.some(w => w.status === 'done' && w.t.suggest), 14000)) return;
+  S.front = S.workers.find(w => w.status === 'done' && w.t.suggest); render();
+  if (!await step('this worker found something that is not in the backlog and offers to file it. press 2, then 1.', 3000)) return;
+  await pressKey(2); if (!live()) return;
+  await pause(1500); if (!live()) return;
+  await pressKey(1); if (!live()) return;
+  // 7. an idea mid-flow
+  if (!await step('an idea hits mid-flow. you type /adddd idea … and it is filed without leaving your card.', 2400)) return;
+  await typeIn('/adddd idea try adddd on the oldest repo I still care about'); if (!live()) return;
+  // 8. off-screen
+  await pause(1800); if (!live()) return;
+  const n = pickNudge();
+  if (n) { if (S.squirrel) S.squirrelQueue.unshift(S.squirrel); S.squirrel = n; S.holdSquirrel = true; render(); }
+  if (!await step('one squirrel in three is off-screen. you do the thing, then press 2: did it.', 3200)) return;
+  await pressKey(2); if (!live()) return;
+  if (!await step('that is the loop: one card, one prompt, the rest in the background. nothing pushes; you review, you ship.', 2600)) return;
+  stopDemo('that was a typical few minutes.');
+}
+// any real input takes over from the demo
+document.addEventListener('pointerdown', () => { if (S.demo) stopDemo('you took over.'); }, true);
+document.addEventListener('keydown', e => { if (S.demo && !e.metaKey && !e.ctrlKey && !e.altKey) stopDemo('you took over.'); }, true);
+
 // ---------- input: digits press buttons, words dispatch ----------
 function press(k) {
   const card = nowCard();
   const n = Number(k);
   if (card.kind === 'ticket') {
-    if (n === 0) { S.backlog = [...S.backlog.filter(t => t !== card.t), card.t]; S.picked = null; pickNext(); toast(`skipped ${card.t.key}; it goes to the back of the line`); render(); return; }
+    if (n === 0) { S.backlog = [...S.backlog.filter(t => t !== card.t), card.t]; S.picked = null; S.chosen = false; toast(`skipped ${card.t.key}; it goes to the back of the line`); render(); return; }
     const p = card.t.prompts[n - 1]; if (p) dispatchFromCard(p);
     return;
   }
   if (card.kind === 'worker') {
     const w = card.w;
     if (w.status === 'needs-human') {
-      if (n === 0) { w.status = 'dismissed'; toast(`${w.t.key} parked. its worktree stays.`); if (!S.picked) pickNext(); render(); return; }
+      if (n === 0) { w.status = 'dismissed'; toast(`${w.t.key} parked. its worktree stays.`); render(); return; }
       const r = w.t.ask.replies[n - 1]; if (r) answer(w, n - 1, r);
     } else {
       if (n === 1) review(w);
+      if (n === 2 && w.t.suggest && !w.filed) { const t = fileTicket(w.t.suggest.ticket, `from ${w.t.key}'s card`); w.filed = t.key; render(); }
     }
     return;
   }
@@ -725,12 +1049,27 @@ function press(k) {
       if (n === 1) dismissSquirrel('🐿️ gone.');
       if (n === 2) { s.showGist = true; render(); }
       if (n === 3) {
-        const text = `${s.title}\n${s.url}`;
-        const done = () => { s.note = 'no Slack on a website; copied the link instead'; render(); };
-        if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, done); else done();
+        const slug = slugOf(s.title);
+        S.squirrel = null; S.holdSquirrel = false; markSeen(s.url); serveSquirrel();
+        fileTicket({ kind: 'READ', title: `read: ${s.title}`,
+          prompts: ['Three bullets, then whether it was worth it.', 'Read it for me and say if I should.', 'Just the gist.'],
+          done: { summary: `read it, wrote three bullets; committed notes/${slug}.md`, files: [`notes/${slug}.md`], checks: 'tests – · typecheck – · build –',
+            body: `<p><a href="${s.url}">${esc(s.title)}</a> · ${esc(s.blurb)}</p><ul>${s.gist.map(g => `<li>${esc(g)}</li>`).join('')}</ul><p class="dim">${esc(s.why)}</p>` } }, 'the squirrel is parked as a ticket; back to work');
       }
       if (n === 4) { window.open(s.url, '_blank', 'noopener'); s.note = 'opened in a new tab'; render(); }
     }
+    return;
+  }
+  if (card.kind === 'idle' && S.demo) { if (n === 1) stopDemo('stopped.'); return; }
+  if (card.kind === 'idle' && S.backlog.length && S.dispatches === 0 && !S.chose) {
+    if (n === 0) showPlain();
+    else if (n === 1) startDemo();
+    else if (n === 2) { S.chose = true; render(); }
+    return;
+  }
+  if (card.kind === 'idle' && S.backlog.length) {
+    if (n === 0) showPlain();
+    else if (n === 1) submit('/adddd');
     return;
   }
   if (card.kind === 'idle' && S.backlog.length === 0) {
@@ -750,6 +1089,36 @@ function dispatchFromCard(prompt) {
   render();
 }
 function submit(text) {
+  const cmd = text.match(/^\/adddd(?:\s+(\S+))?(?:\s+(.*))?$/i);
+  if (cmd && !/^(idea|park|later)$/i.test(cmd[1] || '')) {
+    const verb = (cmd[1] || '').toLowerCase();
+    if (!verb || verb === 'next' || verb === 'skip') {
+      const skipped = verb && S.picked ? S.picked : null;
+      if (skipped) S.backlog = [...S.backlog.filter(t => t !== skipped), skipped];
+      const t = topTicket(skipped);
+      if (!t) { log(text, 'the backlog is empty 🎉'); return; }
+      S.picked = t; S.chosen = true;
+      log(text, `🎯 ${t.key} · ${esc(t.title)} · type ONE prompt and press Enter, or press a number`);
+      render(); return;
+    }
+    if (verb === 'ok') {
+      const w = S.workers.find(x => x.status === 'done');
+      if (w) { log(text, `✔ ${w.t.key} reviewed; the slot is free`); review(w); } else log(text, 'nothing is done and waiting for an ok.');
+      return;
+    }
+    if (verb === 'source') { setSource((cmd[2] || '').trim().toLowerCase() === 'github' ? 'github' : 'linear'); return; }
+    log(text, `<code>/adddd ${esc(verb)}</code> only exists in the real plugin. here: /adddd, next, ok, idea …, source linear|github.`);
+    return;
+  }
+  const idea = text.match(/^(?:\/adddd\s+)?(?:idea|park|later)\s*:?\s+(.+)$/i);
+  if (idea) {
+    const title = idea[1].trim();
+    log(text, `💡 captured without leaving your card. in the real plugin this is <code>/adddd idea …</code> and it files straight into Linear or GitHub Issues.`);
+    fileTicket({ kind: 'IDEA', title, prompts: ['Do the obvious thing.', 'Investigate first, then the smallest change.', 'Write it up, do not build it.'],
+      done: { summary: 'wrote the note; committed notes/' + slugOf(title) + '.md', files: ['notes/' + slugOf(title) + '.md'], checks: 'tests – · typecheck – · build –',
+        body: `<p>You filed this from the prompt. In the real plugin a worker would now do the work in its own worktree; on this page there is nothing behind it but what you typed:</p><p><i>${esc(title)}</i></p>` } });
+    return;
+  }
   let card = nowCard();
   if (card.kind === 'squirrel') { S.squirrel = null; serveSquirrel(); card = nowCard(); if (card.kind === 'squirrel') { S.squirrel = null; card = nowCard(); } }
   if (card.kind === 'worker') {
@@ -759,6 +1128,7 @@ function submit(text) {
     return;
   }
   if (card.kind === 'ticket') { dispatch(card.t, text); render(); return; }
+  if (card.kind === 'idle' && S.backlog.length) { log(text, 'nothing is in front of you, so that went to your main conversation. type /adddd to pick a ticket.'); return; }
   log(text, 'nothing in front of you, so this went nowhere. (in the real thing it would go to your main conversation.)');
 }
 $('composer').addEventListener('submit', e => {
@@ -790,8 +1160,8 @@ function showPlain() {
   window.scrollTo(0, 0);
 }
 $('readBtn').addEventListener('click', showPlain);
+$('resetBtn').addEventListener('click', () => { S.demo = false; history.replaceState(null, '', location.pathname); location.reload(); });
 $('readLink').addEventListener('click', e => { e.preventDefault(); showPlain(); });
-$('readLink2').addEventListener('click', e => { e.preventDefault(); showPlain(); });
 if (location.hash === '#read') showPlain();
 
 // ---------- sound toggle, clock ----------
@@ -802,7 +1172,7 @@ paintSound();
 setInterval(() => { if (!S.plain) { guardBreak(); render(); } }, 20000);
 
 // ---------- go ----------
-pickNext();
+window.adddd = S; // for poking at it in the console
 render();
 restock();
 if (!S.plain && !phone()) $('input').focus();
