@@ -18,6 +18,7 @@ export type Actions = {
   jumpIn: (worker: AddddWorker) => void
   back: () => void
   dismiss: (worker: AddddWorker) => void
+  file: (worker: AddddWorker) => void
   retry: (worker: AddddWorker) => void
   skip: () => void
   pause: () => void
@@ -254,6 +255,9 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
       {w.status === 'done' && w.checks ? <Text color={checksBad ? 'red' : 'green'}>checks: {w.checks}</Text> : null}
       {w.status === 'done' && !w.checks ? <Text color="yellow">checks: the worker did not say what it ran</Text> : null}
       {touching ? <Text dimColor>{w.status === 'done' ? 'start here: ' : 'touching: '}{touching}</Text> : null}
+      {w.status === 'done' && w.suggest ? (
+        w.filed ? <Text color="green">💡 filed {w.filed} · {w.suggest}</Text> : <Text color="cyan">💡 also found: {w.suggest}</Text>
+      ) : null}
       <Text dimColor>
         {w.status === 'done'
           ? 'press a number, or type a follow-up and it resumes · /adddd review ' + w.key
@@ -276,8 +280,13 @@ export function drawNow(ui: Ui, board: AddddBoard, a: Actions, viewingAgent: str
             reviewed, next
           </Button>
         ) : null}
+        {w.status === 'done' && w.suggest && !w.filed ? (
+          <Button key={`file-${w.key}`} hotkey="2" plain onPress={() => a.file(w)}>
+            file it
+          </Button>
+        ) : null}
         {w.status === 'done' && w.agentId ? (
-          <Button key={`jump-${w.key}`} hotkey="2" plain onPress={() => a.jumpIn(w)}>
+          <Button key={`jump-${w.key}`} hotkey={w.suggest && !w.filed ? '3' : '2'} plain onPress={() => a.jumpIn(w)}>
             open transcript
           </Button>
         ) : null}

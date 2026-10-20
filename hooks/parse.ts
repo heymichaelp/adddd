@@ -6,6 +6,8 @@ export type ParsedStatus = {
   soFar?: string
   /** What the worker verified, e.g. "tests ✔ · typecheck ✔ · build –". */
   checks?: string
+  /** A follow-up ticket the worker noticed but did not do; the operator can file it with one key. */
+  suggest?: string
 }
 
 const STATUS = /ADDDD:\s*(done|needs-human|needs human|blocked)\b/gi
@@ -20,7 +22,7 @@ function lastParagraph(text: string): string {
 }
 
 function field(block: string, name: string): string | undefined {
-  const m = block.match(new RegExp(`^\\s*${name}:\\s*([\\s\\S]*?)(?=^\\s*(?:summary|question|so-far|sofar|checks|ADDDD):|\\s*\`\`\`|$(?![\\r\\n]))`, 'mi'))
+  const m = block.match(new RegExp(`^\\s*${name}:\\s*([\\s\\S]*?)(?=^\\s*(?:summary|question|so-far|sofar|checks|suggest|ADDDD):|\\s*\`\`\`|$(?![\\r\\n]))`, 'mi'))
   const v = m?.[1]?.trim()
   return v ? v : undefined
 }
@@ -44,6 +46,7 @@ export function parseStatus(answer: string): ParsedStatus {
   const question = field(block, 'question')
   const soFar = field(block, 'so-far') ?? field(block, 'sofar')
   const checks = field(block, 'checks')
-  if (word === 'done') return { status: 'done', summary, soFar, checks }
+  const suggest = field(block, 'suggest')
+  if (word === 'done') return { status: 'done', summary, soFar, checks, suggest }
   return { status: word, summary, question: question ?? (word === 'blocked' ? summary : 'The worker needs you.'), soFar, checks }
 }

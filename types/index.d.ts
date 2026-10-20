@@ -34,6 +34,10 @@ export type AddddWorker = {
   soFar?: string
   /** What the worker verified before calling it done, e.g. "tests ✔ · typecheck ✔". */
   checks?: string
+  /** A follow-up the worker suggested in its status block (done only). */
+  suggest?: string
+  /** The key of the ticket filed from that suggestion, once the operator did. */
+  filed?: string
   touched: string[]
   /** Ready-made replies to the worker's question; a number key sends one. */
   suggestions?: string[]

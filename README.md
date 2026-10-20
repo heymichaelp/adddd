@@ -37,7 +37,7 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 | `/adddd next` / `gist` / `slack` / `browser` | the squirrel in front of you: next, three-bullet gist on the card, DM yourself, open in your browser (`look` and `open` are aliases) |
 | `/adddd squirrel` | fetch one now |
 | `/adddd did` / `never` | an off-screen card: you did the thing · retire that nudge for good |
-| `/adddd idea <text>` / `later` | file a backlog ticket without leaving your card · file the squirrel in front of you |
+| `/adddd idea <text>` / `later` / `file` | file a backlog ticket without leaving your card · file the squirrel in front of you · file the follow-up a done worker suggested |
 | `/adddd standup` | three lines on yesterday / today / blocked, drafted from the board and copied |
 | `/adddd eod` | what is open, plus a "tomorrow, start here" note you see first next time |
 | `/adddd say <reply>` / `next` / `browser` / `inbox` | the unread Slack message in front of you: reply, mark read, open the permalink, check now |
@@ -62,7 +62,7 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 
 **Re-entry.** A card that comes back shows what you said when you dispatched it, the worker's one-line `so far` (what it did and ruled off), and the files it is touching, so you do not rebuild the ticket in your head. When you come back to a session, the band says what happened while you were gone. `/adddd eod` when you stop writes a "tomorrow, start here" note that is the first thing you see next time.
 
-**Capture.** `/adddd idea <text>` files a backlog ticket (GitHub issue labelled `adddd:idea`, or a Linear issue) with a note of which card you were on, and leaves you on that card. `/adddd later` on a squirrel files the link the same way. `/adddd standup` drafts three lines from the board and your branches' commits and copies them.
+**Capture.** `/adddd idea <text>` files a backlog ticket (GitHub issue labelled `adddd:idea`, or a Linear issue) with a note of which card you were on, and leaves you on that card. `/adddd later` on a squirrel files the link the same way. A worker that notices something outside its ticket says so in a `suggest:` line; the done card shows it as 💡 and `2: file it` (or `/adddd file`) turns it into a ticket without leaving the card. `/adddd standup` drafts three lines from the board and your branches' commits and copies them.
 
 **Time.** The status line shows how long you have been at it. After `breakEvery` minutes (default 90) without a break, the next card is an off-screen nudge that says so; `did it` counts as the break, `next` snoozes it twenty minutes. A worker that needs you is never pre-empted by it. Typing after a gap of fifteen minutes or more also counts as a break.
 

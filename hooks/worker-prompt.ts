@@ -19,6 +19,7 @@ summary: one or two lines on what you did and where it stands
 so-far: one line on what you already did and what you ruled out (needs-human / blocked only; the operator has forgotten this ticket)
 question: the one thing you need answered (needs-human / blocked only)
 checks: tests ✔ · typecheck ✔ · build – (✔ passed, ✘ failed, – not applicable; done only)
+suggest: one line naming a follow-up ticket you noticed but did not do (optional; done only; the operator can file it with one key)
 
 "done" means committed and ready for a human to review. "needs-human" means you are waiting on an answer. "blocked" means you cannot proceed at all (missing credentials, a broken toolchain). Omitting the block makes the operator read your whole message, which they will hate.`
 

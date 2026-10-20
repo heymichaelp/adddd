@@ -247,6 +247,10 @@ describe('re-entry and review gates', () => {
     expect(p.question).toBe('uppercase or not?')
     const d = parseStatus('ADDDD: done\nsummary: shipped\nchecks: tests ✔ · typecheck ✔ · build –')
     expect(d.checks).toBe('tests ✔ · typecheck ✔ · build –')
+    const s = parseStatus('ADDDD: done\nsummary: shipped\nchecks: tests ✔ · typecheck – · build –\nsuggest: the loop doc never shows the status block')
+    expect(s.checks).toBe('tests ✔ · typecheck – · build –')
+    expect(s.suggest).toBe('the loop doc never shows the status block')
+    expect(parseStatus('ADDDD: done\nsummary: shipped').suggest).toBeUndefined()
     expect(d.summary).toBe('shipped')
   })
   test('the worker prompt asks for both lines', () => {

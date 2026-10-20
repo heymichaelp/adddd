@@ -84,6 +84,7 @@ const USAGE = [
   '/adddd say <reply> · next · browser   the Slack message in front of you · /adddd inbox checks now',
   '/adddd squirrel      fetch one now',
   '/adddd idea <text>   file it in the backlog and stay on your card (later: file the squirrel in front of you)',
+  '/adddd file [KEY]    file the follow-up a done worker suggested (the 💡 line on its card)',
   '/adddd standup       three lines on yesterday / today / blocked, copied for you',
   '/adddd eod           what is open, plus a "tomorrow, start here" note you will see next time',
   '/adddd view [KEY]    put that worker\'s transcript in the main view · /adddd back',
@@ -599,7 +600,7 @@ async function declare($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'adddd',
     description: 'ADD-driven development: one ticket, one prompt, one worktree at a time',
-    argumentHint: '[next|ok|did|never|gist|slack|browser|idea|standup|eod|view|reply|pane|pause|status|source|review|retry|cleanup]',
+    argumentHint: '[next|ok|did|never|gist|slack|browser|idea|file|standup|eod|view|reply|pane|pause|status|source|review|retry|cleanup]',
   })
 }
 
@@ -732,6 +733,22 @@ async function captureIdea($: EngineInterface, text: string): Promise<string> {
   return `💡 filed ${filed.key}${filed.url ? ` · ${filed.url}` : ''} · back to ${fromSquirrel ? 'the next card' : from}`
 }
 
+/** Files the follow-up a worker suggested as a backlog ticket, from its done card. */
+async function fileSuggestion($: EngineInterface, w: AddddWorker): Promise<string> {
+  if (!w.suggest) return `${w.key} did not suggest anything.`
+  if (w.filed) return `already filed as ${w.filed}.`
+  const now = await $.clock.now()
+  const body = `suggested by ${w.key}'s worker (${w.ticket.url}) at ${new Date(now).toLocaleTimeString()}\n\nwhile working on: ${w.prompt}`
+  const filed =
+    source === 'github'
+      ? await createGithubIssue($, root, opt.githubRepo, w.suggest, body)
+      : await createLinearIssue($, opt.linearServer, opt.linearTeam, w.suggest, body)
+  backlog.push({ key: filed.key, id: filed.key, title: w.suggest, url: filed.url, source, priority: 0, createdAt: now })
+  w.filed = filed.key
+  await publish($)
+  return `💡 filed ${filed.key}${filed.url ? ` · ${filed.url}` : ''} · ${w.key}'s card is still in front of you`
+}
+
 async function refreshTouched($: EngineInterface, w: AddddWorker): Promise<boolean> {
   try {
     const files = await touchedFiles($, w.worktree, w.base, w.branch)
@@ -823,6 +840,7 @@ const actions = ($: EngineInterface): Actions => ({
       await publish($)
     })()
   },
+  file: w => void fileSuggestion($, w),
   retry: w => {
     void (async () => {
       try {
@@ -1076,6 +1094,11 @@ export const register: Register = (on, options) => {
         await publish($)
         return { text: `dismissed ${targets.map(w => w.key).join(', ')}. branches stay; /adddd cleanup removes clean worktrees.${picked ? ` NEXT ▶ ${picked.key} · ${picked.title}` : ''}` }
       }
+      case 'file': {
+        const w = arg ? findWorker(arg) : (() => { const c = nowCard({ workers, picked, squirrel, slackMsg }); return c.kind === 'worker' ? c.worker : undefined })()
+        if (!w) return { text: arg ? `no worker ${arg}` : 'no worker card is in front of you.' }
+        return { text: await fileSuggestion($, w) }
+      }
       case 'reply': {
         const [key = '', ...words] = rest
         const w = findWorker(key)
@@ -1220,6 +1243,7 @@ export const register: Register = (on, options) => {
           w.question = parsed.question
           w.soFar = parsed.soFar
           w.checks = parsed.checks
+          w.suggest = parsed.suggest
           w.status = parsed.status === 'done' ? 'done' : 'needs-human'
           if (w.status === 'needs-human') {
             w.suggestions = [...STATIC_REPLIES]

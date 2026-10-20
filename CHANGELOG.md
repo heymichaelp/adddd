@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.0 — 2026-10-20
+
+- Workers can suggest a follow-up: a `suggest:` line in the status block becomes a 💡 line on the done card with `2: file it`, which files it into Linear or GitHub Issues without leaving the card (`/adddd file [KEY]` does the same).
+- `next` replaces `meh`: whatever is in front of you, the next thing. A squirrel, a nudge or a Slack message goes away; a ticket is skipped. `meh` still works as an alias.
+- adddd.dev: the site is a simulation of the plugin, with a narrated demo, tracker and host skins, and the plugin's own commands at the prompt.
+
 ## 0.5.0 — 2026-10-17
 
 Built from a research pass on ADHD and software work (ICSE 2025 "Get Me In The Groove", the 2026 copresence study, Tether, and clinical write-ups): re-entry, capture, time, review gates.
