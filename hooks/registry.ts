@@ -16,8 +16,8 @@ export function openWorktrees(workers: readonly AddddWorker[]): AddddWorker[] {
  * not an empty backlog, and it is never a celebration: the reason stays in front of you until
  * the next fetch works.
  */
-export function emptyBacklogText(note: string | null): string {
-  if (note?.startsWith('backlog:')) return `adddd: could not read the backlog · ${note.slice('backlog:'.length).trim()} · /adddd to try again`
+export function emptyBacklogText(backlogError: string | null | undefined): string {
+  if (backlogError) return `adddd: could not read the backlog · ${backlogError} · /adddd to try again`
   return 'adddd: the backlog is empty (or everything is already in a worktree). 🎉'
 }
 

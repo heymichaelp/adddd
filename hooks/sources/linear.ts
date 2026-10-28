@@ -91,6 +91,16 @@ export function toTicket(issue: Obj): AddddTicket | undefined {
  */
 const BACKLOG_TYPES = ['backlog', 'unstarted']
 
+/**
+ * A guard behind the server-side filter, for a server that ignores it: the issue's own status type
+ * when it carries one, and only failing that the state's name.
+ */
+export function stillBacklog(issue: Obj): boolean {
+  if (typeof issue.statusType === 'string') return BACKLOG_TYPES.includes(issue.statusType)
+  if (isObj(issue.state) && typeof issue.state.type === 'string') return BACKLOG_TYPES.includes(issue.state.type)
+  return !NOT_BACKLOG.test(stateName(issue))
+}
+
 export async function listLinearIssues($: EngineInterface, server: string, team: string): Promise<AddddTicket[]> {
   const found = new Map<string, AddddTicket>()
   for (const state of BACKLOG_TYPES) {
@@ -100,8 +110,7 @@ export async function listLinearIssues($: EngineInterface, server: string, team:
     const text = textOf(result)
     if (result.isError) throw new Error(`Linear list_issues: ${text.slice(0, 300) || 'error'}`)
     for (const issue of parseIssueList(text)) {
-      // The name is still checked: a server that ignores the type filter must not hand back closed work.
-      if (NOT_BACKLOG.test(stateName(issue))) continue
+      if (!stillBacklog(issue)) continue
       const ticket = toTicket(issue)
       if (ticket && !found.has(ticket.key)) found.set(ticket.key, ticket)
     }
