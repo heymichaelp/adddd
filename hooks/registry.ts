@@ -11,6 +11,16 @@ export function openWorktrees(workers: readonly AddddWorker[]): AddddWorker[] {
   return workers.filter(w => w.status !== 'dismissed')
 }
 
+/**
+ * What the NOW card says when there is no ticket to show. A backlog that could not be read is
+ * not an empty backlog, and it is never a celebration: the reason stays in front of you until
+ * the next fetch works.
+ */
+export function emptyBacklogText(note: string | null): string {
+  if (note?.startsWith('backlog:')) return `adddd: could not read the backlog · ${note.slice('backlog:'.length).trim()} · /adddd to try again`
+  return 'adddd: the backlog is empty (or everything is already in a worktree). 🎉'
+}
+
 export function atCapacity(workers: readonly AddddWorker[], max: number): boolean {
   return max > 0 && openWorktrees(workers).length >= max
 }
