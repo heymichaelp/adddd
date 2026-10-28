@@ -89,6 +89,8 @@ export type AddddBoard = {
   backlogCount: number
   source: AddddSource
   note: string | null
+  /** Why the last backlog fetch failed, until the next one works. Not an empty backlog. */
+  backlogError?: string | null
   now: number
   /** When this Claude Code session started (for the clock in the status line). */
   startedAt: number

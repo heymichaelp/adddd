@@ -3,9 +3,9 @@ import { describe, expect, test } from 'claude-code/testing'
 import type { AddddTicket, AddddWorker } from '../types'
 import { parseStatus } from './parse'
 import { pick, weightOf } from './pick'
-import { atCapacity, breakDue, elapsed, nowCard, openWorktrees, overlapsOf, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
+import { atCapacity, breakDue, elapsed, emptyBacklogText, nowCard, openWorktrees, overlapsOf, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
-import { parseIssueList, toTicket as linearTicket } from './sources/linear'
+import { parseIssueList, stillBacklog, toTicket as linearTicket } from './sources/linear'
 import { NUDGES, makeLifeSquirrel, pickNudge, timeOfDay } from './life'
 import { parseBullets, parseCuration, parseDevto, parseGithub, parseHn, stripHtml, topicsFromFiles, topicsFromPackageJson } from './squirrel'
 import { parseConversations, parseHistory, parseMentions, plainText, tsNewer } from './slack'
@@ -179,6 +179,30 @@ describe('sources', () => {
     expect(parseIssueList(JSON.stringify({ issues: [issue] }))).toHaveLength(1)
     expect(parseIssueList('here you go: ' + JSON.stringify([issue]))).toHaveLength(1)
     expect(linearTicket(issue)?.key).toBe('ENG-1')
+  })
+  test("the official Linear server's shape becomes a ticket: id is the key, uuid the id, priority an object", () => {
+    // What mcp.linear.app returns for list_issues: no `identifier`, `id` is ENG-3117, `uuid` beside it.
+    const issue = { id: 'ENG-3117', uuid: 'e3c4f2f5-1cb6-4b97-814f-f34339163173', title: 'T', url: 'u', priority: { value: 2, name: 'High' }, status: 'Backlog', statusType: 'backlog', createdAt: '2026-10-28T20:12:41.613Z' }
+    const t = linearTicket(issue)
+    expect(t?.key).toBe('ENG-3117')
+    expect(t?.id).toBe('e3c4f2f5-1cb6-4b97-814f-f34339163173')
+    expect(t?.priority).toBe(2)
+  })
+  test('an issue with neither an identifier nor a key-shaped id is not a ticket', () => {
+    expect(linearTicket({ id: 'e3c4f2f5-1cb6-4b97-814f-f34339163173', title: 'T' })).toBeUndefined()
+  })
+  test('a backlog that could not be read says so on the card instead of celebrating', () => {
+    const failed = emptyBacklogText('Linear list_issues: boom')
+    expect(failed).toContain('boom')
+    expect(failed).not.toContain('🎉')
+    expect(emptyBacklogText(null)).toContain('🎉')
+  })
+  test("the backlog guard trusts the issue's status type over its name", () => {
+    expect(stillBacklog({ status: 'Ready for Review', statusType: 'unstarted' })).toBe(true)
+    expect(stillBacklog({ status: 'Shipped', statusType: 'completed' })).toBe(false)
+    expect(stillBacklog({ state: { name: 'Todo', type: 'unstarted' } })).toBe(true)
+    expect(stillBacklog({ status: 'Done' })).toBe(false)
+    expect(stillBacklog({ status: 'Backlog' })).toBe(true)
   })
   test('github labels map to priorities', () => {
     expect(priorityOfLabels(['bug', 'P0'])).toBe(1)

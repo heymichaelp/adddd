@@ -49,9 +49,27 @@ function stateName(issue: Obj): string {
   return ''
 }
 
+/** `ENG-123`: the identifier Linear shows. The official server returns it as `id`, with the row's `uuid` beside it. */
+const KEY = /^[A-Z][A-Z0-9]*-\d+$/
+
+function keyOf(issue: Obj): string | undefined {
+  if (typeof issue.identifier === 'string') return issue.identifier
+  if (typeof issue.id === 'string' && KEY.test(issue.id)) return issue.id
+  return undefined
+}
+
+/** A number (1 urgent … 4 low), or the official server's `{ value, name }`. */
+function priorityOf(issue: Obj): number {
+  const p = issue.priority
+  if (typeof p === 'number') return p
+  if (isObj(p) && typeof p.value === 'number') return p.value
+  return 0
+}
+
 export function toTicket(issue: Obj): AddddTicket | undefined {
-  const key = typeof issue.identifier === 'string' ? issue.identifier : undefined
-  const id = typeof issue.id === 'string' ? issue.id : key
+  const key = keyOf(issue)
+  // The uuid when the server gives one, else whatever it calls the id: update_issue takes either.
+  const id = typeof issue.uuid === 'string' ? issue.uuid : typeof issue.id === 'string' ? issue.id : key
   const title = typeof issue.title === 'string' ? issue.title : undefined
   if (!key || !id || !title) return undefined
   const created = typeof issue.createdAt === 'string' ? Date.parse(issue.createdAt) : NaN
@@ -61,23 +79,43 @@ export function toTicket(issue: Obj): AddddTicket | undefined {
     title,
     url: typeof issue.url === 'string' ? issue.url : `https://linear.app/issue/${key}`,
     source: 'linear',
-    priority: typeof issue.priority === 'number' ? issue.priority : 0,
+    priority: priorityOf(issue),
     createdAt: Number.isFinite(created) ? created : 0,
     description: typeof issue.description === 'string' ? issue.description : undefined,
   }
 }
 
+/**
+ * The status types nobody is on yet. Asked for by type, one call each, so a busy team's day of
+ * closed tickets cannot crowd the candidates out of an unfiltered "most recently updated" page.
+ */
+const BACKLOG_TYPES = ['backlog', 'unstarted']
+
+/**
+ * A guard behind the server-side filter, for a server that ignores it: the issue's own status type
+ * when it carries one, and only failing that the state's name.
+ */
+export function stillBacklog(issue: Obj): boolean {
+  if (typeof issue.statusType === 'string') return BACKLOG_TYPES.includes(issue.statusType)
+  if (isObj(issue.state) && typeof issue.state.type === 'string') return BACKLOG_TYPES.includes(issue.state.type)
+  return !NOT_BACKLOG.test(stateName(issue))
+}
+
 export async function listLinearIssues($: EngineInterface, server: string, team: string): Promise<AddddTicket[]> {
-  const args: Obj = { limit: 50 }
-  if (team) args.team = team
-  const result = await $.mcp.call(server, 'list_issues', args)
-  const text = textOf(result)
-  if (result.isError) throw new Error(`Linear list_issues: ${text.slice(0, 300) || 'error'}`)
-  const issues = parseIssueList(text)
-  return issues
-    .filter(issue => !NOT_BACKLOG.test(stateName(issue)))
-    .map(toTicket)
-    .filter((t): t is AddddTicket => t !== undefined)
+  const found = new Map<string, AddddTicket>()
+  for (const state of BACKLOG_TYPES) {
+    const args: Obj = { limit: 100, state }
+    if (team) args.team = team
+    const result = await $.mcp.call(server, 'list_issues', args)
+    const text = textOf(result)
+    if (result.isError) throw new Error(`Linear list_issues: ${text.slice(0, 300) || 'error'}`)
+    for (const issue of parseIssueList(text)) {
+      if (!stillBacklog(issue)) continue
+      const ticket = toTicket(issue)
+      if (ticket && !found.has(ticket.key)) found.set(ticket.key, ticket)
+    }
+  }
+  return [...found.values()]
 }
 
 /** Files a new issue in the backlog. Resolves its key and url, or throws with the server's complaint. */
@@ -88,7 +126,7 @@ export async function createLinearIssue($: EngineInterface, server: string, team
   const text = textOf(result)
   if (result.isError) throw new Error(`Linear create_issue: ${text.slice(0, 200) || 'error'}`)
   const issue = parseIssueList(text)[0] ?? (() => { try { const d: unknown = JSON.parse(text); return isObj(d) ? (isObj(d.issue) ? d.issue : d) : {} } catch { return {} } })()
-  const key = typeof issue.identifier === 'string' ? issue.identifier : text.match(/\b[A-Z][A-Z0-9]+-\d+\b/)?.[0] ?? 'LIN-?'
+  const key = keyOf(issue) ?? text.match(/\b[A-Z][A-Z0-9]+-\d+\b/)?.[0] ?? 'LIN-?'
   const url = typeof issue.url === 'string' ? issue.url : text.match(/https?:\/\/linear\.app\/\S+/)?.[0] ?? ''
   return { key, url }
 }

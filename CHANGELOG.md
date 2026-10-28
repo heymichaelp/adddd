@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.2 — 2026-10-28
+
+- Fix: the Linear backlog reads as empty against the official Linear MCP server (#10). The server returns each issue as `id: "ENG-123"` with a `uuid` beside it and `priority` as `{ value, name }`; the plugin wanted `identifier` and a number, so every issue was dropped before the picker saw it. Both shapes are accepted now, and priority weighting works again.
+- Candidates are asked for by status type (`backlog`, `unstarted`), one page of 100 each, instead of the team's 50 most recently updated issues filtered afterwards, so a day of closed tickets cannot crowd the backlog out.
+- A backlog fetch that fails shows its reason on the NOW card and in `/adddd status` until the next fetch works, instead of an 8-second toast followed by "the backlog is empty 🎉".
+
 ## 0.6.1 — 2026-10-20
 
 - Fix: `file it` and `dismiss` on a card now act on the registry's own worker, so filing a suggestion or parking a worker sticks.

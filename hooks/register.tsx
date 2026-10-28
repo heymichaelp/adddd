@@ -4,7 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { AddddBoard, AddddSlackMsg, AddddSource, AddddSquirrel, AddddTicket, AddddWorker, PickMode } from '../types'
 import { parseStatus } from './parse'
 import { pick } from './pick'
-import { ago, atCapacity, breakDue, doneUnreviewed, elapsed, inFlight, isActive, needsHuman, nowCard, openWorktrees, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
+import { ago, atCapacity, breakDue, doneUnreviewed, elapsed, emptyBacklogText, inFlight, isActive, needsHuman, nowCard, openWorktrees, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, createGithubIssue, labelGithubIssue, listGithubIssues } from './sources/github'
 import { createLinearIssue, listLinearIssues, setLinearState } from './sources/linear'
 import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
@@ -101,6 +101,8 @@ let paused = false
 let backlog: AddddTicket[] = []
 let source: AddddSource = opt.source
 let note: string | null = null
+/** Why the last backlog fetch failed; cleared only by the next fetch that works. */
+let backlogError: string | null = null
 let viewing: string | undefined
 let root = ''
 let storeKey = 'adddd:'
@@ -157,6 +159,7 @@ async function publish($: EngineInterface): Promise<AddddBoard> {
     backlogCount: backlog.length,
     source,
     note,
+    backlogError,
     now,
     startedAt: sessionStartedAt,
     pickedAt,
@@ -178,10 +181,9 @@ async function fetchBacklog($: EngineInterface): Promise<AddddTicket[]> {
 async function pickNext($: EngineInterface, skipping?: string): Promise<AddddTicket | null> {
   try {
     backlog = await fetchBacklog($)
-    note = null
+    backlogError = null
   } catch (err) {
-    note = `backlog: ${(err as Error)?.message ?? String(err)}`.slice(0, 160)
-    $.ui.toast(`adddd · ${note}`, { timeoutMs: 8000 })
+    backlogError = ((err as Error)?.message ?? String(err)).slice(0, 160)
     backlog = []
   }
   if (atCapacity(workers, opt.maxInFlight)) {
@@ -788,7 +790,8 @@ async function reconcile($: EngineInterface): Promise<void> {
 }
 
 function statusText(now: number): string {
-  if (workers.length === 0 && !picked) return 'adddd: nothing in flight. /adddd to pick a ticket.'
+  const failed = backlogError ? `\ncould not read the backlog: ${backlogError}` : ''
+  if (workers.length === 0 && !picked) return `adddd: nothing in flight. /adddd to pick a ticket.${note ? `\n${note}` : ''}${failed}`
   const lines = workers
     .filter(w => w.status !== 'dismissed')
     .map(w => {
@@ -797,11 +800,13 @@ function statusText(now: number): string {
     })
   if (picked) lines.push(`- picked, waiting for your prompt: ${picked.key} ${picked.title}`)
   lines.push(`backlog: ${backlog.length} · source: ${source}${paused ? ' · paused' : ''}`)
+  if (note) lines.push(note)
+  if (backlogError) lines.push(`could not read the backlog: ${backlogError}`)
   return lines.join('\n')
 }
 
 function pickedText(t: AddddTicket | null): string {
-  if (!t) return 'adddd: the backlog is empty (or everything is already in a worktree). 🎉'
+  if (!t) return emptyBacklogText(backlogError)
   return `🎯 ${t.key} · ${t.title}\n${t.url}\n\ntype ONE prompt and press Enter. it goes to a worker in its own worktree, not to this conversation.`
 }
 
