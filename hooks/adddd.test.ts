@@ -1,3 +1,4 @@
+import type { EngineInterface } from 'claude-code'
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { AddddTicket, AddddWorker } from '../types'
@@ -5,7 +6,7 @@ import { parseStatus } from './parse'
 import { pick, weightOf } from './pick'
 import { atCapacity, breakDue, elapsed, emptyBacklogText, nowCard, openWorktrees, overlapsOf, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
-import { parseIssueList, stillBacklog, toTicket as linearTicket } from './sources/linear'
+import { LIST_FIELDS, listLinearIssues, parseIssueList, stillBacklog, toTicket as linearTicket } from './sources/linear'
 import { NUDGES, makeLifeSquirrel, pickNudge, timeOfDay } from './life'
 import { parseBullets, parseCuration, parseDevto, parseGithub, parseHn, stripHtml, topicsFromFiles, topicsFromPackageJson } from './squirrel'
 import { parseConversations, parseHistory, parseMentions, plainText, tsNewer } from './slack'
@@ -27,6 +28,21 @@ const worker = (key: string, status: AddddWorker['status'], extra: Partial<Adddd
   updatedAt: 0,
   ...extra,
 })
+
+type McpCall = { tool: string; args: Record<string, unknown> }
+/** An engine whose only working part is mcp.call, answering every call with `answer(args)`. */
+function fakeLinear(answer: (args: Record<string, unknown>) => string): { $: EngineInterface; calls: McpCall[] } {
+  const calls: McpCall[] = []
+  const $ = {
+    mcp: {
+      call: async (_server: string, tool: string, args: Record<string, unknown>) => {
+        calls.push({ tool, args })
+        return { content: [{ type: 'text', text: answer(args) }], isError: false }
+      },
+    },
+  } as unknown as EngineInterface
+  return { $, calls }
+}
 
 describe('parseStatus', () => {
   test('reads a done block', () => {
@@ -203,6 +219,48 @@ describe('sources', () => {
     expect(stillBacklog({ state: { name: 'Todo', type: 'unstarted' } })).toBe(true)
     expect(stillBacklog({ status: 'Done' })).toBe(false)
     expect(stillBacklog({ status: 'Backlog' })).toBe(true)
+  })
+  test('the backlog asks list_issues for 50 at a time with only the fields a ticket needs, no description', async () => {
+    const { $, calls } = fakeLinear(() => JSON.stringify({ issues: [], hasNextPage: false }))
+    await listLinearIssues($, 'linear', 'ENG')
+    expect(calls).toHaveLength(2)
+    for (const c of calls) {
+      expect(c.tool).toBe('list_issues')
+      expect(c.args.limit).toBe(50)
+      expect(c.args.fields).toEqual(LIST_FIELDS)
+      expect(c.args.team).toBe('ENG')
+    }
+    expect(LIST_FIELDS).not.toContain('description')
+    expect(calls.map(c => c.args.state)).toEqual(['backlog', 'unstarted'])
+  })
+  test('a second page is followed by its cursor while hasNextPage is true', async () => {
+    const row = (n: number) => ({ id: `ENG-${n}`, uuid: `u${n}`, title: `t${n}`, status: 'Backlog', statusType: 'backlog' })
+    const { $, calls } = fakeLinear(args => {
+      if (args.state !== 'backlog') return JSON.stringify({ issues: [], hasNextPage: false })
+      return args.cursor === 'c1' ? JSON.stringify({ issues: [row(2)], hasNextPage: false }) : JSON.stringify({ issues: [row(1)], hasNextPage: true, cursor: 'c1' })
+    })
+    const tickets = await listLinearIssues($, 'linear', '')
+    expect(tickets.map(t => t.key)).toEqual(['ENG-1', 'ENG-2'])
+    expect(calls.filter(c => c.args.state === 'backlog').map(c => c.args.cursor)).toEqual([undefined, 'c1'])
+  })
+  test('paging stops at 200 issues per status type', async () => {
+    let n = 0
+    const { $, calls } = fakeLinear(args => {
+      if (args.state !== 'backlog') return JSON.stringify({ issues: [], hasNextPage: false })
+      const issues = Array.from({ length: 50 }, () => ({ id: `ENG-${++n}`, title: 't', statusType: 'backlog' }))
+      return JSON.stringify({ issues, hasNextPage: true, cursor: `c${n}` })
+    })
+    expect(await listLinearIssues($, 'linear', '')).toHaveLength(200)
+    expect(calls.filter(c => c.args.state === 'backlog')).toHaveLength(4)
+  })
+  test('an unreadable result, like the host notice for an oversized one, throws instead of reading as an empty backlog', async () => {
+    const notice = 'Error: result (74,831 characters) exceeds maximum allowed tokens. Output has been saved to /tmp/mcp-linear-list_issues-1730.txt'
+    const { $ } = fakeLinear(() => notice)
+    await expect(listLinearIssues($, 'linear', 'ENG')).rejects.toThrow(`Linear list_issues: unreadable result: ${notice.slice(0, 120)}`)
+  })
+  test('a readable empty page is still an empty backlog', async () => {
+    const { $ } = fakeLinear(() => JSON.stringify({ issues: [], hasNextPage: false }))
+    expect(await listLinearIssues($, 'linear', '')).toEqual([])
   })
   test('github labels map to priorities', () => {
     expect(priorityOfLabels(['bug', 'P0'])).toBe(1)
