@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.3 — 2026-10-28
+
+- Fix: the Linear backlog still read as empty when a page was too big (#14). `list_issues` is now asked for only the fields a ticket needs (no descriptions), 50 at a time, following `cursor` while `hasNextPage` is true, up to 200 per status type. One page of 50 with descriptions was about 75,000 characters, which the host swaps for a "saved to file" notice.
+- A non-empty `list_issues` answer with no issue list in it is now an error (`Linear list_issues: unreadable result: …`) on the card, not "the backlog is empty 🎉".
+- A picked Linear ticket's description is fetched on its own with `get_issue`, for the suggested prompts and the worker. Without one, the prompts stay generic.
+
 ## 0.6.2 — 2026-10-28
 
 - Fix: the Linear backlog reads as empty against the official Linear MCP server (#10). The server returns each issue as `id: "ENG-123"` with a `uuid` beside it and `priority` as `{ value, name }`; the plugin wanted `identifier` and a number, so every issue was dropped before the picker saw it. Both shapes are accepted now, and priority weighting works again.

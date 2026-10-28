@@ -6,7 +6,7 @@ import { parseStatus } from './parse'
 import { pick } from './pick'
 import { ago, atCapacity, breakDue, doneUnreviewed, elapsed, emptyBacklogText, inFlight, isActive, needsHuman, nowCard, openWorktrees, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, createGithubIssue, labelGithubIssue, listGithubIssues } from './sources/github'
-import { createLinearIssue, listLinearIssues, setLinearState } from './sources/linear'
+import { createLinearIssue, getLinearDescription, listLinearIssues, setLinearState } from './sources/linear'
 import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
 import { isLife, makeLifeSquirrel, pickNudge } from './life'
 import { gistOf, huntSquirrel, openInBrowser, sendSlack, topicsOf } from './squirrel'
@@ -203,6 +203,11 @@ async function pickNext($: EngineInterface, skipping?: string): Promise<AddddTic
 }
 
 async function refreshPromptSuggestions($: EngineInterface, t: AddddTicket): Promise<void> {
+  // The backlog list leaves descriptions out; fetch this one's now, for the prompts and the worker.
+  if (t.source === 'linear' && t.description === undefined) {
+    const description = await getLinearDescription($, opt.linearServer, t)
+    if (description !== undefined) t.description = description
+  }
   const found = await suggestPrompts($, t).catch(() => [])
   if (found.length === 0 || picked?.key !== t.key) return
   picked.suggestions = found

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "adddd",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "license": "MIT",
   "description": "ADD-driven development: one ticket, one prompt, one worktree at a time. Unlimited background workers; the operator handles one card.",
   "author": {
