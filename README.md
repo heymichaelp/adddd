@@ -33,6 +33,7 @@ To hack on it: `claude --plugin-dir /path/to/adddd`.
 | `/adddd ok [KEY\|all]` | dismiss the card in front of you (a done worker), one by key, or every done one |
 | `/adddd pane` | open the board (NOW card, in-flight list, overlaps) |
 | `/adddd pause` / `resume` | stop picking (workers keep running) |
+| `/adddd quit` / `start` | turn adddd off in this session, no restart and no settings edit: nothing is picked or dispatched, prompts go to the conversation, the status line clears, and it lists what is still open with how to leave it or wind it down (`off` and `stop` are aliases). `start` turns it back on |
 | `/adddd status` | text summary of every worktree, readable by the model too |
 | `/adddd next` / `gist` / `slack` / `browser` | the squirrel in front of you: next, three-bullet gist on the card, DM yourself, open in your browser (`look` and `open` are aliases) |
 | `/adddd squirrel` | fetch one now |

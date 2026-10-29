@@ -87,6 +87,27 @@ export function statusLine(
   return `adddd · ${bits.join(' · ')}`
 }
 
+/** What `/adddd quit` leaves behind: every open worktree, where its ticket was moved, and the two ways out. */
+export function quitReport(workers: readonly AddddWorker[], picked: AddddTicket | null, movedTickets: boolean): string {
+  const moved = (w: AddddWorker) => {
+    if (!movedTickets) return ''
+    const review = w.status === 'done'
+    if (w.ticket.source === 'github') return ` · labelled ${review ? 'adddd:review' : 'adddd:in-progress'}`
+    return ` · ticket ${review ? 'In Review' : 'In Progress'}`
+  }
+  const open = openWorktrees(workers)
+  const lines = ['adddd is off in this session: nothing is picked or dispatched, your prompts go to the conversation, the status line is cleared. /adddd start turns it back on.']
+  if (open.length === 0 && !picked) return `${lines[0]}\nnothing in flight.`
+  if (open.length > 0) lines.push(`still open (${open.length}):`)
+  for (const w of open) lines.push(`- ${w.key} [${w.status === 'failed' ? 'stalled' : w.status}] ${w.ticket.title} · ${w.branch} · ${w.worktree}${moved(w)}`)
+  if (picked) lines.push(`- picked, never dispatched: ${picked.key} ${picked.title} (still in the backlog)`)
+  if (open.length > 0) {
+    lines.push('leave it: running workers finish on their own and commit on their branches. nothing is pushed.')
+    lines.push('wind it down: stop running workers in /tasks, then /adddd dismiss KEY (or ok all for done ones) and /adddd cleanup. branches stay.')
+  }
+  return lines.join('\n')
+}
+
 /** "1h35m" style, for how long something has been going on. */
 export function elapsed(from: number, now: number): string {
   const m = Math.max(0, Math.floor((now - from) / 60000))
