@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.0 — 2026-10-29
+
+- `/adddd quit` (also `off`, `stop`): turns adddd off in the running session without a restart or a settings edit (#16). Nothing is picked or dispatched, plain prompts go to the conversation, the status line and band clear, the board closes, squirrels and Slack polling stop. It lists every open worktree with its branch, path and where its ticket was moved, and how to leave it or wind it down. `/adddd start` turns it back on. Housekeeping (`status`, `review`, `ok`, `dismiss`, `cleanup`) still answers while it is off.
+- `stop` used to be an undocumented alias for `eod`; it now quits. `/adddd eod` is unchanged.
+
 ## 0.6.3 — 2026-10-28
 
 - Fix: the Linear backlog still read as empty when a page was too big (#14). `list_issues` is now asked for only the fields a ticket needs (no descriptions), 50 at a time, following `cursor` while `hasNextPage` is true, up to 200 per status type. One page of 50 with descriptions was about 75,000 characters, which the host swaps for a "saved to file" notice.

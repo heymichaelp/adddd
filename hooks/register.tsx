@@ -4,7 +4,7 @@ import type { EngineInterface, PluginOptions, Register } from 'claude-code'
 import type { AddddBoard, AddddSlackMsg, AddddSource, AddddSquirrel, AddddTicket, AddddWorker, PickMode } from '../types'
 import { parseStatus } from './parse'
 import { pick } from './pick'
-import { ago, atCapacity, breakDue, doneUnreviewed, elapsed, emptyBacklogText, inFlight, isActive, needsHuman, nowCard, openWorktrees, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
+import { ago, atCapacity, breakDue, doneUnreviewed, elapsed, emptyBacklogText, inFlight, isActive, needsHuman, nowCard, openWorktrees, quitReport, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { GH_LABEL_PROGRESS, GH_LABEL_REVIEW, createGithubIssue, labelGithubIssue, listGithubIssues } from './sources/github'
 import { createLinearIssue, getLinearDescription, listLinearIssues, setLinearState } from './sources/linear'
 import { dmSelf, markRead, permalinkOf, plainText, pollSlack, sayBack, userName, whoAmI, type SlackSeen } from './slack'
@@ -76,6 +76,7 @@ const USAGE = [
   '/adddd next       whatever is in front of you, next: a squirrel or nudge goes away, a ticket is skipped',
   '/adddd pane       open the board',
   '/adddd pause|resume',
+  '/adddd quit       off in this session, no restart: nothing picked, prompts go to the conversation · /adddd start',
   '/adddd status     what every worktree is doing',
   '/adddd source linear|github',
   '/adddd ok [KEY|all]  dismiss the card in front of you (or one, or every done one)',
@@ -98,6 +99,14 @@ let workers: AddddWorker[] = []
 let picked: AddddTicket | null = null
 let pickedAt = 0
 let paused = false
+/**
+ * /adddd quit. Not a settings edit: `enabledPlugins` is read when a session loads its hooks, and
+ * /clear or /reload-plugins does not unload a module already running (#16), so the switch lives here.
+ * This session only, and in memory: a new session starts with adddd on.
+ */
+let off = false
+/** Verbs that still answer while adddd is off: turning it on, looking, and winding down. */
+const OFF_VERBS = new Set(['', 'start', 'go', 'quit', 'off', 'stop', 'status', 'review', 'ok', 'done', 'dismiss', 'cleanup'])
 let backlog: AddddTicket[] = []
 let source: AddddSource = opt.source
 let note: string | null = null
@@ -166,7 +175,7 @@ async function publish($: EngineInterface): Promise<AddddBoard> {
   }
   await update($, board, () => snap)
   const busy = workers.some(isActive) || picked !== null
-  $.ui.status(busy ? statusLine(snap) : undefined)
+  $.ui.status(busy && !off ? statusLine(snap) : undefined)
   if (loaded) await $.store.set(storeKey, { workers, picked, source } satisfies Persisted)
   return snap
 }
@@ -302,7 +311,7 @@ function ticketContext(): string[] {
 
 /** Keeps one squirrel ready in the pantry so the card appears the instant a ticket ships. */
 async function restock($: EngineInterface): Promise<void> {
-  if (!opt.squirrels || pantry || hunting) return
+  if (off || !opt.squirrels || pantry || hunting) return
   hunting = true
   try {
     if (!(Math.random() < opt.lifeShare)) {
@@ -387,7 +396,7 @@ async function idleFill($: EngineInterface): Promise<boolean> {
 
 /** A slot opened (a dismiss, a cleanup): pick a ticket again if none is waiting. */
 async function afterSlotFreed($: EngineInterface): Promise<void> {
-  if (paused || picked || atCapacity(workers, opt.maxInFlight)) return
+  if (off || paused || picked || atCapacity(workers, opt.maxInFlight)) return
   await pickNext($)
 }
 
@@ -402,7 +411,7 @@ async function slackName($: EngineInterface, user: string): Promise<string> {
 }
 
 async function checkSlack($: EngineInterface): Promise<number> {
-  if (!opt.slackToken || slackPolling) return 0
+  if (off || !opt.slackToken || slackPolling) return 0
   slackPolling = true
   try {
     if (!slackSelf) slackSelf = await whoAmI($, opt.slackToken)
@@ -607,7 +616,7 @@ async function declare($: EngineInterface): Promise<void> {
   await $.command.register({
     name: 'adddd',
     description: 'ADD-driven development: one ticket, one prompt, one worktree at a time',
-    argumentHint: '[next|ok|did|never|gist|slack|browser|idea|file|standup|eod|view|reply|pane|pause|status|source|review|retry|cleanup]',
+    argumentHint: '[next|ok|did|never|gist|slack|browser|idea|file|standup|eod|view|reply|pane|pause|quit|start|status|source|review|retry|cleanup]',
   })
 }
 
@@ -617,6 +626,7 @@ function isWorkerNotification(text: string): boolean {
 }
 
 function announce($: EngineInterface, w: AddddWorker): void {
+  if (off) return
   const line =
     w.status === 'done'
       ? `✅ ${w.key} done${w.checks ? ` (${w.checks})` : ''}: ${w.summary ?? 'committed on ' + w.branch}`
@@ -769,7 +779,7 @@ async function refreshTouched($: EngineInterface, w: AddddWorker): Promise<boole
 }
 
 async function reconcile($: EngineInterface): Promise<void> {
-  if (!loaded) return
+  if (!loaded || off) return
   const now = await $.clock.now()
   let agents: Awaited<ReturnType<typeof $.agent.list>> = []
   try {
@@ -975,10 +985,12 @@ export const register: Register = (on, options) => {
     const [verb = '', ...rest] = e.args.trim().split(/\s+/)
     const arg = rest.join(' ')
     const now = await $.clock.now()
+    if (off && !OFF_VERBS.has(verb)) return { text: 'adddd is off in this session. /adddd start turns it back on.' }
     switch (verb) {
       case '':
       case 'start':
       case 'go': {
+        off = false
         paused = false
         void $.ui.open({ id: PANE, title: 'adddd' })
         const t = await pickNext($)
@@ -1006,7 +1018,19 @@ export const register: Register = (on, options) => {
         return { text: pickedText(t) }
       }
       case 'status':
-        return { text: statusText(now) }
+        return { text: `${off ? 'adddd is off in this session. /adddd start turns it back on.\n' : ''}${statusText(now)}` }
+      case 'quit':
+      case 'off':
+      case 'stop': {
+        off = true
+        if (viewing) {
+          viewing = undefined
+          await $.ui.view({})
+        }
+        await $.ui.close({ id: PANE }).catch(() => undefined)
+        await publish($)
+        return { text: quitReport(workers, picked, opt.moveToReview) }
+      }
       case 'next':
       case 'skip':
       case 'meh':
@@ -1051,7 +1075,6 @@ export const register: Register = (on, options) => {
       case 'standup':
         return { text: await standup($) }
       case 'eod':
-      case 'stop':
         return { text: await eod($) }
       case 'did':
       case 'done!':
@@ -1191,7 +1214,7 @@ export const register: Register = (on, options) => {
       if (lastPromptAt && now - lastPromptAt >= BREAK_GAP_MS) lastBreakAt = now
       lastPromptAt = now
     }
-    if (!loaded || viewing || e.command || e.isMeta || e.origin.kind !== 'composer') return next(e)
+    if (!loaded || off || viewing || e.command || e.isMeta || e.origin.kind !== 'composer') return next(e)
     const text = e.text.trim()
     if (!text || text.startsWith('/')) return next(e)
     let card = nowCard({ workers, picked, squirrel, slackMsg })
@@ -1281,7 +1304,7 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     viewing = e.props.view.agentId
-    if (e.props.hasSurvey) return next(e)
+    if (off || e.props.hasSurvey) return next(e)
     const b = await read($, board)
     const { Box, Text, Button } = $.ui.resolve(e)
     const tree = drawBand({ Box, Text, Button }, b, actions($), viewing)
@@ -1295,7 +1318,7 @@ export const register: Register = (on, options) => {
       $.clock.after(600, () => {
         void (async () => {
           await declare($)
-          if (workers.some(isActive) || picked) await $.ui.open({ id: PANE, title: 'adddd' })
+          if (!off && (workers.some(isActive) || picked)) await $.ui.open({ id: PANE, title: 'adddd' })
           await publish($)
         })().catch(() => undefined)
       })

@@ -1,10 +1,10 @@
 import type { EngineInterface } from 'claude-code'
-import { describe, expect, test } from 'claude-code/testing'
+import { describe, expect, mock, test } from 'claude-code/testing'
 
 import type { AddddTicket, AddddWorker } from '../types'
 import { parseStatus } from './parse'
 import { pick, weightOf } from './pick'
-import { atCapacity, breakDue, elapsed, emptyBacklogText, nowCard, openWorktrees, overlapsOf, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
+import { atCapacity, breakDue, elapsed, emptyBacklogText, nowCard, openWorktrees, overlapsOf, quitReport, safeKey, sinceYouLeft, standupFacts, statusLine } from './registry'
 import { priorityOfLabels, toTicket as ghTicket } from './sources/github'
 import { LIST_FIELDS, listLinearIssues, parseIssueList, stillBacklog, toTicket as linearTicket } from './sources/linear'
 import { NUDGES, makeLifeSquirrel, pickNudge, timeOfDay } from './life'
@@ -276,6 +276,37 @@ describe('worker prompt', () => {
     expect(text).toContain('a.ts')
     expect(text).toContain('just fix it')
     expect(text).toContain('ADDDD status block')
+  })
+})
+
+describe('quit', () => {
+  test('the report names every open worktree, where its ticket went, and both ways out', () => {
+    const gh = worker('GH-7', 'done', { ticket: { ...ticket('GH-7'), source: 'github' } })
+    const text = quitReport([worker('A', 'running'), worker('B', 'failed'), gh, worker('D', 'dismissed')], ticket('E'), true)
+    expect(text).toContain('/adddd start')
+    expect(text).toContain('still open (3)')
+    expect(text).toContain('- A [running] do A · adddd/A · /tmp/A · ticket In Progress')
+    expect(text).toContain('- B [stalled]')
+    expect(text).toContain('labelled adddd:review')
+    expect(text).not.toContain('- D ')
+    expect(text).toContain('picked, never dispatched: E')
+    expect(text).toContain('leave it:')
+    expect(text).toContain('wind it down:')
+  })
+  test('with nothing open it says so, and without status sync it claims no ticket moves', () => {
+    expect(quitReport([worker('D', 'dismissed')], null, true)).toContain('nothing in flight.')
+    expect(quitReport([worker('A', 'running')], null, false)).not.toContain('In Progress')
+  })
+  test('quit stops the command answering until start, and status says it is off', async ($, on) => {
+    mock.clock(on)
+    mock.store(on)
+    on('ui.open', () => ({ value: { isPlaced: false, reason: 'no surface in a test' } }))
+    const quit = await $.command.run({ command: 'adddd', args: 'quit' })
+    expect(quit.text).toContain('adddd is off in this session')
+    expect((await $.command.run({ command: 'adddd', args: 'squirrel' })).text).toBe('adddd is off in this session. /adddd start turns it back on.')
+    expect((await $.command.run({ command: 'adddd', args: 'status' })).text).toContain('adddd is off')
+    await $.command.run({ command: 'adddd', args: 'start' })
+    expect((await $.command.run({ command: 'adddd', args: 'status' })).text).not.toContain('adddd is off')
   })
 })
 
